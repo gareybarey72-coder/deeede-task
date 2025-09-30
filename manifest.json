@@ -43,7 +43,7 @@
       "src": "icons/icon-512.jpg",
       "sizes": "192x192",
       "type": "image/jpg",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "icons/icon-512.jpg",
@@ -58,8 +58,10 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["productivity", "utilities"],
-  "screenshots": [],
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
   "shortcuts": [
     {
       "name": "Add Task",
