@@ -3461,24 +3461,8 @@
 };
 
 export default StickyTasks;
-          // Load saved data from localStorage or use defaults
-          const loadSavedData = (key, defaultValue) => {
-            try {
-              const saved = localStorage.getItem(`stickyTasks_${key}`);
-              return saved ? JSON.parse(saved) : defaultValue;
-            } catch (error) {
-              console.warn(`Failed to load ${key}:`, error);
-              return defaultValue;
-            }
-          };
-
-          // ... [REST OF THE COMPONENT CODE] ...
-          
-          return (
-            <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 p-4">
-              {/* ... [ALL THE JSX] ... */}
-            </div>
-          );
+       
+         
         };
 
         // Render the app
