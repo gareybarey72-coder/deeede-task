@@ -1,0 +1,3370 @@
+import React, { useState, useEffect } from 'react';
+import { Plus, X, Star, Trophy, Target, Zap, Calendar, Clock } from 'lucide-react';
+
+const StickyTasks = () => {
+  // Load saved data from localStorage or use defaults
+  const loadSavedData = (key, defaultValue) => {
+    try {
+      const saved = localStorage.getItem(`stickyTasks_${key}`);
+      return saved ? JSON.parse(saved) : defaultValue;
+    } catch (error) {
+      console.warn(`Failed to load ${key}:`, error);
+      return defaultValue;
+    }
+  };
+
+  const [tasks, setTasks] = useState(() => loadSavedData('tasks', []));
+  const [categories, setCategories] = useState(() => loadSavedData('categories', ['Personal', 'Work', 'Shopping']));
+  const [selectedCategory, setSelectedCategory] = useState(() => loadSavedData('selectedCategory', 'Personal'));
+  const [points, setPoints] = useState(() => loadSavedData('points', 0));
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [newTaskText, setNewTaskText] = useState('');
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [achievements, setAchievements] = useState(() => loadSavedData('achievements', []));
+  const [draggedTask, setDraggedTask] = useState(null);
+  const [activeTab, setActiveTab] = useState(() => loadSavedData('activeTab', 'tasks'));
+  const [taskHistory, setTaskHistory] = useState(() => loadSavedData('taskHistory', {}));
+  const [scheduledTasks, setScheduledTasks] = useState(() => loadSavedData('scheduledTasks', {}));
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchTimer, setTouchTimer] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragPreview, setDragPreview] = useState(null);
+  const [sortBy, setSortBy] = useState(() => loadSavedData('sortBy', 'default'));
+  const [focusMode, setFocusMode] = useState(false);
+  const [focusTask, setFocusTask] = useState(null);
+  const [focusTimeLeft, setFocusTimeLeft] = useState(15 * 60); // 15 minutes in seconds
+  const [focusTimer, setFocusTimer] = useState(null);
+  const [focusStartTime, setFocusStartTime] = useState(null);
+  const [focusSessionsCompleted, setFocusSessionsCompleted] = useState(() => loadSavedData('focusSessionsCompleted', 0));
+  const [showTaskSelector, setShowTaskSelector] = useState(false);
+  const [customGoals, setCustomGoals] = useState(() => loadSavedData('customGoals', []));
+  const [showGoalsModal, setShowGoalsModal] = useState(false);
+  const [showCreateGoal, setShowCreateGoal] = useState(false);
+  const [newGoalTitle, setNewGoalTitle] = useState('');
+  const [newGoalDescription, setNewGoalDescription] = useState('');
+  const [newGoalType, setNewGoalType] = useState('tasks');
+  const [newGoalTarget, setNewGoalTarget] = useState(5);
+  
+  // Import confirmation modal state
+  const [showImportConfirm, setShowImportConfirm] = useState(false);
+  const [importPreviewData, setImportPreviewData] = useState(null);
+  
+  // Mood tracking state
+  const [showMoodModal, setShowMoodModal] = useState(false);
+  const [moodEntries, setMoodEntries] = useState(() => loadSavedData('moodEntries', {}));
+  const [currentMoodEntry, setCurrentMoodEntry] = useState({
+    flow: 5,           // 1-10 scale: Struggle (1) to Flow (10)
+    connection: 5,     // 1-10 scale: Lonely (1) to Connected (10)
+    purpose: 5,        // 1-10 scale: Aimless (1) to Purposeful (10)
+    journal: ''
+  });
+  const [hasLoggedMoodToday, setHasLoggedMoodToday] = useState(false);
+  
+  // Motivation state
+  const [showMotivation, setShowMotivation] = useState(false);
+  const [currentMotivationMessage, setCurrentMotivationMessage] = useState(null);
+  
+  // Business hours state
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Motivational messages
+  const motivationMessages = [
+    // Existential/Reflective Messages
+    {
+      type: 'existential',
+      message: "Will future you be proud of how you spend your time today?",
+      emoji: '🤔',
+      color: 'from-purple-600 to-indigo-600'
+    },
+    {
+      type: 'existential',
+      message: "Every small step forward is a victory over yesterday's excuses.",
+      emoji: '🚀',
+      color: 'from-blue-600 to-purple-600'
+    },
+    {
+      type: 'existential',
+      message: "What would the person you want to become do right now?",
+      emoji: '🌟',
+      color: 'from-yellow-500 to-orange-500'
+    },
+    {
+      type: 'existential',
+      message: "Time is the only currency you can't earn back. Spend it wisely.",
+      emoji: '⏰',
+      color: 'from-red-500 to-pink-500'
+    },
+    {
+      type: 'existential',
+      message: "Your comfort zone is a beautiful place, but nothing grows there.",
+      emoji: '🌱',
+      color: 'from-green-500 to-teal-500'
+    },
+    {
+      type: 'existential',
+      message: "The gap between who you are and who you want to be is what you do.",
+      emoji: '🎯',
+      color: 'from-indigo-600 to-purple-600'
+    },
+    {
+      type: 'existential',
+      message: "Progress, not perfection. Every task completed is growth.",
+      emoji: '📈',
+      color: 'from-emerald-500 to-blue-500'
+    },
+
+    // Practical Suggestion Messages
+    {
+      type: 'suggestion',
+      message: "Listen to a podcast or audiobook while cleaning or organizing.",
+      emoji: '🎧',
+      color: 'from-cyan-500 to-blue-500'
+    },
+    {
+      type: 'suggestion',
+      message: "Set a 15-minute timer and see how much you can accomplish!",
+      emoji: '⏲️',
+      color: 'from-orange-500 to-red-500'
+    },
+    {
+      type: 'suggestion',
+      message: "Try the 2-minute rule: if it takes less than 2 minutes, do it now.",
+      emoji: '⚡',
+      color: 'from-yellow-500 to-orange-600'
+    },
+    {
+      type: 'suggestion',
+      message: "Break that big task into 3 smaller, manageable pieces.",
+      emoji: '🧩',
+      color: 'from-purple-500 to-pink-500'
+    },
+    {
+      type: 'suggestion',
+      message: "Reward yourself with something nice after completing your next task.",
+      emoji: '🎁',
+      color: 'from-pink-500 to-rose-500'
+    },
+    {
+      type: 'suggestion',
+      message: "Change your environment - try working from a different room or location.",
+      emoji: '🔄',
+      color: 'from-teal-500 to-cyan-500'
+    },
+    {
+      type: 'suggestion',
+      message: "Start with the easiest task to build momentum for the harder ones.",
+      emoji: '🌊',
+      color: 'from-blue-500 to-indigo-500'
+    },
+    {
+      type: 'suggestion',
+      message: "Use the Pomodoro technique: 25 minutes focused work, 5 minute break.",
+      emoji: '🍅',
+      color: 'from-red-500 to-orange-500'
+    },
+    {
+      type: 'suggestion',
+      message: "Put your phone in another room to eliminate distractions.",
+      emoji: '📱',
+      color: 'from-gray-600 to-gray-800'
+    },
+    {
+      type: 'suggestion',
+      message: "Play upbeat music to energize yourself for action.",
+      emoji: '🎵',
+      color: 'from-purple-600 to-pink-600'
+    },
+    {
+      type: 'suggestion',
+      message: "Tell someone about your task - accountability can be powerful motivation.",
+      emoji: '🤝',
+      color: 'from-green-600 to-blue-600'
+    },
+    {
+      type: 'suggestion',
+      message: "Visualize how good you'll feel when this task is complete.",
+      emoji: '✨',
+      color: 'from-yellow-400 to-pink-400'
+    },
+
+    // Encouraging/Motivational Messages
+    {
+      type: 'encouragement',
+      message: "You've got this! Every expert was once a beginner.",
+      emoji: '💪',
+      color: 'from-orange-600 to-red-600'
+    },
+    {
+      type: 'encouragement',
+      message: "Your future self is cheering you on right now!",
+      emoji: '📣',
+      color: 'from-blue-600 to-purple-600'
+    },
+    {
+      type: 'encouragement',
+      message: "Small actions today create big results tomorrow.",
+      emoji: '🎯',
+      color: 'from-green-600 to-teal-600'
+    },
+    {
+      type: 'encouragement',
+      message: "You're closer to your goals than you think. Keep going!",
+      emoji: '🏃‍♂️',
+      color: 'from-indigo-600 to-blue-600'
+    },
+    {
+      type: 'encouragement',
+      message: "Done is better than perfect. Progress over perfection!",
+      emoji: '🚀',
+      color: 'from-purple-600 to-pink-600'
+    }
+  ];
+
+  // Get random motivation message
+  const getRandomMotivation = () => {
+    const randomIndex = Math.floor(Math.random() * motivationMessages.length);
+    return motivationMessages[randomIndex];
+  };
+
+  // Update current time every minute
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // Notification system for scheduled tasks
+  useEffect(() => {
+    // Request notification permission on mount
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    // Check for upcoming tasks every minute
+    const notificationTimer = setInterval(() => {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinutes = now.getMinutes();
+      
+      // Check if we're at the 45-minute mark of any hour (15 min before next hour)
+      if (currentMinutes === 45) {
+        const nextHour = (currentHour + 1) % 24;
+        const today = new Date().toDateString();
+        const todaySchedule = scheduledTasks[today] || {};
+        
+        const upcomingTask = todaySchedule[nextHour];
+        
+        if (upcomingTask && !upcomingTask.completed) {
+          // Show browser notification
+          if ('Notification' in window && Notification.permission === 'granted') {
+            const timeString = nextHour === 0 ? '12:00 AM' : 
+                             nextHour < 12 ? `${nextHour}:00 AM` : 
+                             nextHour === 12 ? '12:00 PM' : 
+                             `${nextHour - 12}:00 PM`;
+            
+            const notification = new Notification('⏰ Upcoming Task Reminder', {
+              body: `"${upcomingTask.text}" is scheduled for ${timeString} (in 15 minutes)`,
+              icon: '📝',
+              badge: '⏰',
+              tag: `task-${upcomingTask.id}`,
+              requireInteraction: false
+            });
+            
+            // Auto-close notification after 10 seconds
+            setTimeout(() => notification.close(), 10000);
+            
+            // Vibrate on mobile if supported
+            if (navigator.vibrate) {
+              navigator.vibrate([200, 100, 200]);
+            }
+          }
+        }
+      }
+    }, 60000); // Check every minute
+
+    return () => clearInterval(notificationTimer);
+  }, [scheduledTasks]);
+
+  // Export data to file
+  const exportData = () => {
+    try {
+      const dataToExport = {
+        version: '1.0',
+        exportDate: new Date().toISOString(),
+        data: {
+          tasks,
+          categories,
+          selectedCategory,
+          points,
+          achievements,
+          activeTab,
+          taskHistory,
+          scheduledTasks,
+          focusSessionsCompleted,
+          customGoals,
+          moodEntries,
+          sortBy
+        }
+      };
+
+      const dataStr = JSON.stringify(dataToExport, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(dataBlob);
+      
+      const dateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+      link.download = `sticky-tasks-backup-${dateStr}.json`;
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Show success message
+      alert('📁 Data exported successfully! Save this file to import on another device.');
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('❌ Export failed. Please try again.');
+    }
+  };
+
+  // Import data from file
+  const importData = (event) => {
+    const file = event.target.files[0];
+    if (!file) {
+      console.log('No file selected');
+      return;
+    }
+
+    console.log('File selected:', file.name);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        console.log('File read successfully');
+        const importedData = JSON.parse(e.target.result);
+        console.log('Parsed data:', importedData);
+        
+        // Validate data structure
+        if (!importedData.data || !importedData.version) {
+          throw new Error('Invalid file format');
+        }
+
+        // Store the import data for confirmation modal
+        setImportPreviewData(importedData);
+        setShowImportConfirm(true);
+        
+      } catch (error) {
+        console.error('Import failed:', error);
+        alert('❌ Import failed. Please make sure you selected a valid Sticky Tasks backup file.\n\nError: ' + error.message);
+      }
+    };
+
+    reader.onerror = (error) => {
+      console.error('FileReader error:', error);
+      alert('❌ Failed to read file. Please try again.');
+    };
+
+    reader.readAsText(file);
+    
+    // Clear the input so the same file can be selected again
+    event.target.value = '';
+  };
+
+  // Confirm and apply import
+  const confirmImport = () => {
+    if (!importPreviewData) return;
+
+    try {
+      const {
+        tasks: importedTasks = [],
+        categories: importedCategories = ['Personal', 'Work', 'Shopping'],
+        selectedCategory: importedSelectedCategory = 'Personal',
+        points: importedPoints = 0,
+        achievements: importedAchievements = [],
+        activeTab: importedActiveTab = 'tasks',
+        taskHistory: importedTaskHistory = {},
+        scheduledTasks: importedScheduledTasks = {},
+        focusSessionsCompleted: importedFocusSessionsCompleted = 0,
+        customGoals: importedCustomGoals = [],
+        moodEntries: importedMoodEntries = {},
+        sortBy: importedSortBy = 'default'
+      } = importPreviewData.data;
+
+      console.log('Applying import - Tasks:', importedTasks.length, 'Points:', importedPoints);
+      
+      // Apply imported data
+      setTasks(importedTasks);
+      setCategories(importedCategories);
+      setSelectedCategory(importedSelectedCategory);
+      setPoints(importedPoints);
+      setAchievements(importedAchievements);
+      setActiveTab(importedActiveTab);
+      setTaskHistory(importedTaskHistory);
+      setScheduledTasks(importedScheduledTasks);
+      setFocusSessionsCompleted(importedFocusSessionsCompleted);
+      setCustomGoals(importedCustomGoals);
+      setMoodEntries(importedMoodEntries);
+      setSortBy(importedSortBy);
+      
+      // Close modal
+      setShowImportConfirm(false);
+      setImportPreviewData(null);
+      
+      console.log('Import complete!');
+    } catch (error) {
+      console.error('Failed to apply import:', error);
+      alert('❌ Failed to apply imported data. Error: ' + error.message);
+    }
+  };
+
+  const stickyColors = ['bg-yellow-200', 'bg-pink-200', 'bg-green-200', 'bg-blue-200', 'bg-purple-200'];
+
+  // Save data to localStorage
+  const saveToStorage = (key, value) => {
+    try {
+      localStorage.setItem(`stickyTasks_${key}`, JSON.stringify(value));
+    } catch (error) {
+      console.warn(`Failed to save ${key}:`, error);
+    }
+  };
+
+  // Save data whenever state changes
+  useEffect(() => {
+    saveToStorage('tasks', tasks);
+  }, [tasks]);
+
+  useEffect(() => {
+    saveToStorage('categories', categories);
+  }, [categories]);
+
+  useEffect(() => {
+    saveToStorage('selectedCategory', selectedCategory);
+  }, [selectedCategory]);
+
+  useEffect(() => {
+    saveToStorage('points', points);
+  }, [points]);
+
+  useEffect(() => {
+    saveToStorage('achievements', achievements);
+  }, [achievements]);
+
+  useEffect(() => {
+    saveToStorage('activeTab', activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    saveToStorage('taskHistory', taskHistory);
+  }, [taskHistory]);
+
+  useEffect(() => {
+    saveToStorage('scheduledTasks', scheduledTasks);
+  }, [scheduledTasks]);
+
+  useEffect(() => {
+    saveToStorage('sortBy', sortBy);
+  }, [sortBy]);
+
+  useEffect(() => {
+    saveToStorage('focusSessionsCompleted', focusSessionsCompleted);
+  }, [focusSessionsCompleted]);
+
+  useEffect(() => {
+    saveToStorage('customGoals', customGoals);
+  }, [customGoals]);
+
+  useEffect(() => {
+    saveToStorage('moodEntries', moodEntries);
+  }, [moodEntries]);
+
+  // Check if mood has been logged today
+  useEffect(() => {
+    const today = new Date().toDateString();
+    const todayMood = moodEntries[today];
+    setHasLoggedMoodToday(!!todayMood);
+  }, [moodEntries]);
+
+  // Achievement definitions
+  const achievementList = [
+    { id: 'first_task', name: 'Getting Started', description: 'Complete your first task', icon: Target, threshold: 1 },
+    { id: 'task_master', name: 'Task Master', description: 'Complete 10 tasks', icon: Trophy, threshold: 10 },
+    { id: 'point_collector', name: 'Point Collector', description: 'Earn 100 points', icon: Star, threshold: 100 },
+    { id: 'category_cleaner', name: 'Category Cleaner', description: 'Complete all tasks in a category', icon: Zap, threshold: 1 },
+    { id: 'focus_master', name: 'Focus Master', description: 'Complete 5 focus sessions', icon: Clock, threshold: 5 }
+  ];
+
+  // Check for achievements and custom goals
+  useEffect(() => {
+    const completedTasks = tasks.filter(task => task.completed).length;
+    
+    // Check built-in achievements
+    achievementList.forEach(achievement => {
+      if (!achievements.includes(achievement.id)) {
+        let shouldUnlock = false;
+        
+        switch (achievement.id) {
+          case 'first_task':
+          case 'task_master':
+            shouldUnlock = completedTasks >= achievement.threshold;
+            break;
+          case 'point_collector':
+            shouldUnlock = points >= achievement.threshold;
+            break;
+          case 'category_cleaner':
+            // Check if any category has all tasks completed
+            const categoryTasks = tasks.filter(task => task.category === selectedCategory);
+            shouldUnlock = categoryTasks.length > 0 && categoryTasks.every(task => task.completed);
+            break;
+          case 'focus_master':
+            shouldUnlock = focusSessionsCompleted >= achievement.threshold;
+            break;
+        }
+        
+        if (shouldUnlock) {
+          setAchievements(prev => [...prev, achievement.id]);
+          // Show achievement notification
+          setTimeout(() => {
+            alert(`🎉 Achievement Unlocked: ${achievement.name}! ${achievement.description}`);
+          }, 500);
+        }
+      }
+    });
+
+    // Check custom goals
+    customGoals.forEach(goal => {
+      if (!goal.completed) {
+        let shouldComplete = false;
+        let currentProgress = 0;
+        
+        switch (goal.type) {
+          case 'tasks':
+            currentProgress = completedTasks;
+            shouldComplete = completedTasks >= goal.target;
+            break;
+          case 'points':
+            currentProgress = points;
+            shouldComplete = points >= goal.target;
+            break;
+          case 'focus':
+            currentProgress = focusSessionsCompleted;
+            shouldComplete = focusSessionsCompleted >= goal.target;
+            break;
+          case 'streak':
+            currentProgress = getStreakInfo();
+            shouldComplete = getStreakInfo() >= goal.target;
+            break;
+        }
+        
+        // Update progress
+        setCustomGoals(prev => prev.map(g => 
+          g.id === goal.id ? { ...g, progress: currentProgress } : g
+        ));
+        
+        if (shouldComplete) {
+          setCustomGoals(prev => prev.map(g => 
+            g.id === goal.id ? { ...g, completed: true, completedAt: new Date().toISOString() } : g
+          ));
+          
+          // Award bonus points for completing custom goal
+          setPoints(prevPoints => prevPoints + goal.reward);
+          
+          setTimeout(() => {
+            alert(`🎯 Goal Achieved: ${goal.title}! +${goal.reward} bonus points! 🎉`);
+          }, 500);
+        }
+      }
+    });
+  }, [tasks, points, achievements, selectedCategory, focusSessionsCompleted, customGoals]);
+
+  // Create new custom goal
+  const createCustomGoal = () => {
+    if (newGoalTitle.trim() && newGoalDescription.trim()) {
+      const newGoal = {
+        id: Date.now(),
+        title: newGoalTitle.trim(),
+        description: newGoalDescription.trim(),
+        type: newGoalType,
+        target: newGoalTarget,
+        progress: 0,
+        reward: Math.max(10, Math.floor(newGoalTarget * (newGoalType === 'points' ? 0.1 : 5))), // Dynamic reward
+        completed: false,
+        createdAt: new Date().toISOString()
+      };
+      
+      setCustomGoals(prev => [...prev, newGoal]);
+      setNewGoalTitle('');
+      setNewGoalDescription('');
+      setNewGoalType('tasks');
+      setNewGoalTarget(5);
+      setShowCreateGoal(false);
+    }
+  };
+
+  // Delete custom goal
+  const deleteCustomGoal = (goalId) => {
+    const goal = customGoals.find(g => g.id === goalId);
+    if (goal && goal.completed) {
+      // Subtract bonus points if goal was completed
+      setPoints(prev => Math.max(0, prev - goal.reward));
+    }
+    setCustomGoals(prev => prev.filter(g => g.id !== goalId));
+  };
+
+  // Mood tracking functions
+  const saveMoodEntry = () => {
+    const today = new Date().toDateString();
+    const moodData = {
+      ...currentMoodEntry,
+      date: today,
+      timestamp: new Date().toISOString(),
+      overallScore: Math.round((currentMoodEntry.flow + currentMoodEntry.connection + currentMoodEntry.purpose) / 3)
+    };
+    
+    setMoodEntries(prev => ({
+      ...prev,
+      [today]: moodData
+    }));
+    
+    // Award points for logging mood
+    setPoints(prev => prev + 15);
+    
+    // Reset form and close modal
+    setCurrentMoodEntry({
+      flow: 5,
+      connection: 5,
+      purpose: 5,
+      journal: ''
+    });
+    setShowMoodModal(false);
+    setHasLoggedMoodToday(true);
+    
+    // Show success message
+    setTimeout(() => {
+      alert('🌟 Mood logged! +15 points for self-reflection! 🌟');
+    }, 300);
+  };
+
+  const getMoodEmoji = (score) => {
+    if (score <= 2) return '😢';
+    if (score <= 4) return '😕';
+    if (score <= 6) return '😐';
+    if (score <= 8) return '🙂';
+    return '😊';
+  };
+
+  const getMoodColor = (score) => {
+    if (score <= 2) return 'text-red-500';
+    if (score <= 4) return 'text-orange-500';
+    if (score <= 6) return 'text-yellow-500';
+    if (score <= 8) return 'text-green-500';
+    return 'text-blue-500';
+  };
+
+  const getMoodBackgroundColor = (score) => {
+    if (score <= 2) return 'bg-red-100';
+    if (score <= 4) return 'bg-orange-100';
+    if (score <= 6) return 'bg-yellow-100';
+    if (score <= 8) return 'bg-green-100';
+    return 'bg-blue-100';
+  };
+
+  const addTask = () => {
+    if (newTaskText.trim()) {
+      const newTask = {
+        id: Date.now(),
+        text: newTaskText,
+        category: selectedCategory,
+        completed: false,
+        color: stickyColors[Math.floor(Math.random() * stickyColors.length)],
+        order: tasks.filter(t => t.category === selectedCategory).length,
+        importance: 5, // Default importance level (1-10)
+        urgency: 5,     // Default urgency level (1-10)
+        businessHoursOnly: false // New field for business hours restriction
+      };
+      setTasks([...tasks, newTask]);
+      setNewTaskText('');
+      setShowAddTask(false);
+    }
+  };
+
+  const toggleTask = (taskId) => {
+    setTasks(tasks.map(task => {
+      if (task.id === taskId) {
+        const updatedTask = { ...task, completed: !task.completed };
+        if (!task.completed && updatedTask.completed) {
+          // Task just completed - award points and track in history
+          setPoints(prev => prev + 10);
+          const today = new Date().toDateString();
+          setTaskHistory(prev => ({
+            ...prev,
+            [today]: (prev[today] || 0) + 1
+          }));
+        } else if (task.completed && !updatedTask.completed) {
+          // Task uncompleted - subtract points and adjust history
+          setPoints(prev => Math.max(0, prev - 10));
+          const today = new Date().toDateString();
+          setTaskHistory(prev => ({
+            ...prev,
+            [today]: Math.max(0, (prev[today] || 0) - 1)
+          }));
+        }
+        return updatedTask;
+      }
+      return task;
+    }));
+  };
+
+  const deleteTask = (taskId) => {
+    const taskToDelete = tasks.find(task => task.id === taskId);
+    if (taskToDelete && taskToDelete.completed) {
+      setPoints(prev => Math.max(0, prev - 10));
+      // Adjust history if we're deleting a completed task
+      const today = new Date().toDateString();
+      setTaskHistory(prev => ({
+        ...prev,
+        [today]: Math.max(0, (prev[today] || 0) - 1)
+      }));
+    }
+    setTasks(tasks.filter(task => task.id !== taskId));
+  };
+
+  const updateTaskSlider = (taskId, sliderType, value) => {
+    setTasks(tasks.map(task => 
+      task.id === taskId 
+        ? { ...task, [sliderType]: parseInt(value) }
+        : task
+    ));
+  };
+
+  const toggleBusinessHours = (taskId) => {
+    setTasks(tasks.map(task => 
+      task.id === taskId 
+        ? { ...task, businessHoursOnly: !task.businessHoursOnly }
+        : task
+    ));
+  };
+
+  // Check if current time is during business hours (7 AM - 6 PM)
+  const isBusinessHours = () => {
+    const hour = currentTime.getHours();
+    return hour >= 7 && hour < 18; // 7 AM to 6 PM
+  };
+
+  // Check if a task is available based on business hours restriction
+  const isTaskAvailable = (task) => {
+    if (!task.businessHoursOnly) return true; // Non-business tasks are always available
+    return isBusinessHours(); // Business tasks only available during business hours
+  };
+
+  const getTaskPriority = (importance, urgency) => {
+    const score = importance + urgency;
+    if (score >= 16) return { label: 'Critical', color: 'text-red-600', bgColor: 'bg-red-50' };
+    if (score >= 12) return { label: 'High', color: 'text-orange-600', bgColor: 'bg-orange-50' };
+    if (score >= 8) return { label: 'Medium', color: 'text-yellow-600', bgColor: 'bg-yellow-50' };
+    return { label: 'Low', color: 'text-green-600', bgColor: 'bg-green-50' };
+  };
+
+  const addCategory = () => {
+    if (newCategoryName.trim() && !categories.includes(newCategoryName.trim())) {
+      setCategories([...categories, newCategoryName.trim()]);
+      setNewCategoryName('');
+      setShowAddCategory(false);
+    }
+  };
+
+  // Focus mode functions
+  const startFocusMode = (task) => {
+    setFocusTask(task);
+    setFocusMode(true);
+    setShowTaskSelector(false); // Close task selector
+    setFocusTimeLeft(15 * 60); // Reset to 15 minutes
+    setFocusStartTime(Date.now());
+    
+    // Start the timer
+    const timer = setInterval(() => {
+      setFocusTimeLeft(prev => {
+        if (prev <= 1) {
+          // Timer finished
+          clearInterval(timer);
+          setFocusTimer(null);
+          
+          // Mark task as completed and award bonus points
+          toggleTask(task.id);
+          setPoints(prevPoints => prevPoints + 25); // Bonus points for focus session
+          setFocusSessionsCompleted(prev => prev + 1);
+          
+          // Show completion notification
+          if (navigator.vibrate) {
+            navigator.vibrate([200, 100, 200, 100, 200]);
+          }
+          
+          // Auto-exit focus mode after a delay
+          setTimeout(() => {
+            setFocusMode(false);
+            setFocusTask(null);
+            alert('🎉 Focus session completed! Task marked as done. +35 total points earned!');
+          }, 2000);
+          
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    setFocusTimer(timer);
+  };
+
+  const exitFocusMode = () => {
+    if (focusTimer) {
+      clearInterval(focusTimer);
+      setFocusTimer(null);
+    }
+    
+    // Calculate partial session progress and award partial points
+    const timeElapsed = (Date.now() - focusStartTime) / 1000;
+    const minutesElapsed = Math.floor(timeElapsed / 60);
+    
+    if (minutesElapsed >= 5) { // At least 5 minutes for partial credit
+      const partialPoints = Math.floor(minutesElapsed * 2); // 2 points per minute
+      setPoints(prevPoints => prevPoints + partialPoints);
+      alert(`Session ended early. You focused for ${minutesElapsed} minutes and earned ${partialPoints} points!`);
+    }
+    
+    setFocusMode(false);
+    setFocusTask(null);
+    setFocusTimeLeft(15 * 60);
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Touch event handlers for mobile drag and drop
+  const handleTouchStart = (e, task) => {
+    if (task.completed) return;
+    
+    setTouchStart({
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      task: task,
+      timestamp: Date.now()
+    });
+    
+    // Start a timer for long press detection
+    const timer = setTimeout(() => {
+      // Haptic feedback if available
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+      setIsDragging(true);
+      setDraggedTask(task);
+      setDragPreview({
+        task: task,
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY
+      });
+    }, 500); // 500ms long press
+    
+    setTouchTimer(timer);
+  };
+
+  const handleTouchMove = (e, task) => {
+    e.preventDefault();
+    
+    if (!touchStart) return;
+    
+    const touch = e.touches[0];
+    const deltaX = Math.abs(touch.clientX - touchStart.x);
+    const deltaY = Math.abs(touch.clientY - touchStart.y);
+    
+    // If significant movement before long press, cancel the timer
+    if (touchTimer && (deltaX > 10 || deltaY > 10)) {
+      clearTimeout(touchTimer);
+      setTouchTimer(null);
+    }
+    
+    // Update drag preview position if dragging
+    if (isDragging && dragPreview) {
+      setDragPreview({
+        ...dragPreview,
+        x: touch.clientX,
+        y: touch.clientY
+      });
+      
+      // Check if we're over the timeline button
+      const timelineButton = document.querySelector('[data-timeline-button="true"]');
+      if (timelineButton) {
+        const rect = timelineButton.getBoundingClientRect();
+        const isOverButton = touch.clientX >= rect.left && 
+                           touch.clientX <= rect.right && 
+                           touch.clientY >= rect.top && 
+                           touch.clientY <= rect.bottom;
+        
+        if (isOverButton && activeTab !== 'timeline') {
+          setActiveTab('timeline');
+        }
+      }
+      
+      // Check if we're over a time slot
+      const timeSlots = document.querySelectorAll('[data-hour]');
+      timeSlots.forEach(slot => {
+        const rect = slot.getBoundingClientRect();
+        const isOver = touch.clientX >= rect.left && 
+                      touch.clientX <= rect.right && 
+                      touch.clientY >= rect.top && 
+                      touch.clientY <= rect.bottom;
+        
+        if (isOver) {
+          slot.style.backgroundColor = '#dbeafe';
+          slot.style.borderColor = '#3b82f6';
+        } else {
+          slot.style.backgroundColor = '';
+          slot.style.borderColor = '';
+        }
+      });
+    }
+  };
+
+  const handleTouchEnd = (e, task) => {
+    if (touchTimer) {
+      clearTimeout(touchTimer);
+      setTouchTimer(null);
+    }
+    
+    if (isDragging && draggedTask) {
+      const touch = e.changedTouches[0];
+      
+      // Check if dropped on a time slot
+      const timeSlots = document.querySelectorAll('[data-hour]');
+      let dropped = false;
+      
+      timeSlots.forEach(slot => {
+        const rect = slot.getBoundingClientRect();
+        const isOver = touch.clientX >= rect.left && 
+                      touch.clientX <= rect.right && 
+                      touch.clientY >= rect.top && 
+                      touch.clientY <= rect.bottom;
+        
+        if (isOver) {
+          const hour = parseInt(slot.dataset.hour);
+          const today = new Date().toDateString();
+          setScheduledTasks(prev => ({
+            ...prev,
+            [today]: {
+              ...prev[today],
+              [hour]: draggedTask
+            }
+          }));
+          dropped = true;
+        }
+        
+        // Reset visual feedback
+        slot.style.backgroundColor = '';
+        slot.style.borderColor = '';
+      });
+      
+      // Haptic feedback for successful drop
+      if (dropped && navigator.vibrate) {
+        navigator.vibrate([50, 50, 50]);
+      }
+    }
+    
+    // Reset all dragging state
+    setTouchStart(null);
+    setIsDragging(false);
+    setDraggedTask(null);
+    setDragPreview(null);
+  };
+  const handleDragStart = (e, task) => {
+    setDraggedTask(task);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', JSON.stringify(task));
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, targetTask) => {
+    e.preventDefault();
+    if (draggedTask && draggedTask.id !== targetTask.id) {
+      const updatedTasks = [...tasks];
+      const draggedIndex = updatedTasks.findIndex(task => task.id === draggedTask.id);
+      const targetIndex = updatedTasks.findIndex(task => task.id === targetTask.id);
+      
+      // Swap positions
+      [updatedTasks[draggedIndex], updatedTasks[targetIndex]] = [updatedTasks[targetIndex], updatedTasks[draggedIndex]];
+      setTasks(updatedTasks);
+    }
+    setDraggedTask(null);
+  };
+
+  // Timeline drag and drop handlers
+  const handleTimeSlotDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleTimeSlotDrop = (e, hour, isNextDay = false) => {
+    e.preventDefault();
+    
+    let taskToSchedule = null;
+    
+    // Try to get task from drag data transfer (desktop)
+    try {
+      const taskData = e.dataTransfer ? JSON.parse(e.dataTransfer.getData('text/plain')) : null;
+      if (taskData && taskData.id) {
+        taskToSchedule = taskData;
+      }
+    } catch (error) {
+      console.warn('Failed to parse dropped task data:', error);
+    }
+    
+    // If no task from data transfer, use the currently dragged task (mobile/touch)
+    if (!taskToSchedule && draggedTask) {
+      taskToSchedule = draggedTask;
+    }
+    
+    // Schedule the task if we have one
+    if (taskToSchedule) {
+      const targetDate = isNextDay ? 
+        (() => {
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          return tomorrow.toDateString();
+        })() : 
+        new Date().toDateString();
+      
+      // Remove task from any existing time slot in both today and tomorrow
+      setScheduledTasks(prev => {
+        const today = new Date().toDateString();
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowString = tomorrow.toDateString();
+        
+        const todaySchedule = { ...prev[today] };
+        const tomorrowSchedule = { ...prev[tomorrowString] };
+        
+        // Find and remove the task from any existing time slot
+        Object.keys(todaySchedule).forEach(existingHour => {
+          if (todaySchedule[existingHour] && todaySchedule[existingHour].id === taskToSchedule.id) {
+            delete todaySchedule[existingHour];
+          }
+        });
+        
+        Object.keys(tomorrowSchedule).forEach(existingHour => {
+          if (tomorrowSchedule[existingHour] && tomorrowSchedule[existingHour].id === taskToSchedule.id) {
+            delete tomorrowSchedule[existingHour];
+          }
+        });
+        
+        // Add task to new time slot
+        if (isNextDay) {
+          tomorrowSchedule[hour] = taskToSchedule;
+        } else {
+          todaySchedule[hour] = taskToSchedule;
+        }
+        
+        return {
+          ...prev,
+          [today]: todaySchedule,
+          [tomorrowString]: tomorrowSchedule
+        };
+      });
+      
+      // Haptic feedback for mobile
+      if (navigator.vibrate) {
+        navigator.vibrate([50, 50, 50]);
+      }
+      
+      console.log('Task rescheduled:', taskToSchedule.text, 'to hour', hour, isNextDay ? '(tomorrow)' : '(today)');
+    }
+    
+    // Reset drag state
+    setDraggedTask(null);
+    setIsDragging(false);
+  };
+
+  const removeScheduledTask = (hour, isNextDay = false) => {
+    const targetDate = isNextDay ? 
+      (() => {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return tomorrow.toDateString();
+      })() : 
+      new Date().toDateString();
+      
+    setScheduledTasks(prev => {
+      const targetSchedule = { ...prev[targetDate] };
+      delete targetSchedule[hour];
+      return {
+        ...prev,
+        [targetDate]: targetSchedule
+      };
+    });
+  };
+
+  // Helper function to check if a task is scheduled (check both today and tomorrow)
+  const isTaskScheduled = (taskId) => {
+    const today = new Date().toDateString();
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowString = tomorrow.toDateString();
+    
+    const todaySchedule = scheduledTasks[today] || {};
+    const tomorrowSchedule = scheduledTasks[tomorrowString] || {};
+    
+    return Object.values(todaySchedule).some(scheduledTask => 
+      scheduledTask && scheduledTask.id === taskId
+    ) || Object.values(tomorrowSchedule).some(scheduledTask => 
+      scheduledTask && scheduledTask.id === taskId
+    );
+  };
+
+  // Helper function to get the scheduled time for a task (check both today and tomorrow)
+  const getTaskScheduledTime = (taskId) => {
+    const today = new Date().toDateString();
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowString = tomorrow.toDateString();
+    
+    const todaySchedule = scheduledTasks[today] || {};
+    const tomorrowSchedule = scheduledTasks[tomorrowString] || {};
+    
+    // Check today first
+    for (const [hour, scheduledTask] of Object.entries(todaySchedule)) {
+      if (scheduledTask && scheduledTask.id === taskId) {
+        const hourNum = parseInt(hour);
+        return hourNum === 0 ? '12:00 AM' : 
+               hourNum < 12 ? `${hourNum}:00 AM` : 
+               hourNum === 12 ? '12:00 PM' : 
+               `${hourNum - 12}:00 PM`;
+      }
+    }
+    
+    // Check tomorrow
+    for (const [hour, scheduledTask] of Object.entries(tomorrowSchedule)) {
+      if (scheduledTask && scheduledTask.id === taskId) {
+        const hourNum = parseInt(hour);
+        const timeString = hourNum === 0 ? '12:00 AM' : 
+                          hourNum < 12 ? `${hourNum}:00 AM` : 
+                          hourNum === 12 ? '12:00 PM' : 
+                          `${hourNum - 12}:00 PM`;
+        return `${timeString} (Tomorrow)`;
+      }
+    }
+    
+    return null;
+  };
+
+  const currentTasks = tasks.filter(task => task.category === selectedCategory);
+  const allIncompleteTasks = tasks.filter(task => !task.completed);
+  
+  // Separate completed and incomplete tasks
+  const incompleteTasks = currentTasks.filter(task => !task.completed);
+  const completedTasks = currentTasks.filter(task => task.completed);
+  
+  // Sort incomplete tasks
+  const sortedIncompleteTasks = [...incompleteTasks].sort((a, b) => {
+    if (sortBy === 'priority') {
+      const aPriority = (a.importance || 5) + (a.urgency || 5);
+      const bPriority = (b.importance || 5) + (b.urgency || 5);
+      return bPriority - aPriority; // Higher priority first
+    } else if (sortBy === 'importance') {
+      return (b.importance || 5) - (a.importance || 5);
+    } else if (sortBy === 'urgency') {
+      return (b.urgency || 5) - (a.urgency || 5);
+    }
+    // Default order: newest first (higher ID = more recent)
+    return b.id - a.id;
+  });
+  
+  // Sort completed tasks (newest completed first, but always at bottom)
+  const sortedCompletedTasks = [...completedTasks].sort((a, b) => b.id - a.id);
+  
+  // Combine: incomplete tasks first, then completed tasks
+  const sortedTasks = [...sortedIncompleteTasks, ...sortedCompletedTasks];
+  const completedCount = currentTasks.filter(task => task.completed).length;
+
+  // Calendar helper functions
+  const generateCalendarDays = () => {
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    
+    const firstDay = new Date(currentYear, currentMonth, 1);
+    const lastDay = new Date(currentYear, currentMonth + 1, 0);
+    const startDate = new Date(firstDay);
+    startDate.setDate(startDate.getDate() - firstDay.getDay());
+    
+    const days = [];
+    const currentDate = new Date(startDate);
+    
+    while (days.length < 42) { // 6 weeks
+      days.push(new Date(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    return { days, currentMonth, currentYear };
+  };
+
+  const getTaskCountForDate = (date) => {
+    const dateString = date.toDateString();
+    return taskHistory[dateString] || 0;
+  };
+
+  const getMoodForDate = (date) => {
+    const dateString = date.toDateString();
+    return moodEntries[dateString] || null;
+  };
+
+  const getStreakInfo = () => {
+    const today = new Date();
+    let currentStreak = 0;
+    let checkDate = new Date(today);
+    
+    // Check today and go backwards
+    while (getTaskCountForDate(checkDate) > 0) {
+      currentStreak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+    
+    return currentStreak;
+  };
+
+  const renderCalendar = () => {
+    const { days, currentMonth, currentYear } = generateCalendarDays();
+    const today = new Date().toDateString();
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    return (
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <h2 className="text-xl font-semibold text-gray-800 mb-6 text-center">
+          {monthNames[currentMonth]} {currentYear}
+        </h2>
+        
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="bg-blue-50 p-4 rounded-lg text-center">
+            <div className="text-2xl font-bold text-blue-600">{getTaskCountForDate(new Date())}</div>
+            <div className="text-sm text-blue-800">Today</div>
+          </div>
+          <div className="bg-green-50 p-4 rounded-lg text-center">
+            <div className="text-2xl font-bold text-green-600">{getStreakInfo()}</div>
+            <div className="text-sm text-green-800">Day Streak</div>
+          </div>
+          <div className="bg-purple-50 p-4 rounded-lg text-center">
+            <div className="text-2xl font-bold text-purple-600">
+              {Object.values(taskHistory).reduce((sum, count) => sum + count, 0)}
+            </div>
+            <div className="text-sm text-purple-800">Total Tasks</div>
+          </div>
+        </div>
+        
+        {/* Calendar Grid */}
+        <div className="grid grid-cols-7 gap-1 text-center">
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+            <div key={day} className="p-2 font-semibold text-gray-600 text-sm">
+              {day}
+            </div>
+          ))}
+          
+          {days.map((day, index) => {
+            const taskCount = getTaskCountForDate(day);
+            const moodData = getMoodForDate(day);
+            const isToday = day.toDateString() === today;
+            const isCurrentMonth = day.getMonth() === currentMonth;
+            
+            return (
+              <div
+                key={index}
+                className={`p-2 h-16 flex flex-col items-center justify-center text-sm relative ${
+                  isCurrentMonth ? 'text-gray-800' : 'text-gray-400'
+                } ${isToday ? 'bg-blue-100 border-2 border-blue-500 rounded' : ''}`}
+                title={moodData ? `Mood: Flow ${moodData.flow}/10, Connected ${moodData.connection}/10, Purpose ${moodData.purpose}/10` : ''}
+              >
+                <span className="text-xs font-medium">{day.getDate()}</span>
+                
+                {/* Task completion indicator */}
+                {taskCount > 0 && (
+                  <div
+                    className={`absolute bottom-1 left-1 w-2 h-2 rounded-full ${
+                      taskCount >= 5 ? 'bg-green-500' :
+                      taskCount >= 3 ? 'bg-yellow-500' :
+                      'bg-blue-500'
+                    }`}
+                    title={`${taskCount} tasks completed`}
+                  />
+                )}
+                
+                {/* Mood indicator */}
+                {moodData && (
+                  <div
+                    className={`absolute bottom-1 right-1 text-xs ${getMoodColor(moodData.overallScore)}`}
+                    title={`Overall mood: ${moodData.overallScore}/10`}
+                  >
+                    {getMoodEmoji(moodData.overallScore)}
+                  </div>
+                )}
+                
+                {taskCount > 5 && (
+                  <span className="absolute -top-1 -left-1 text-xs font-bold text-green-600">
+                    {taskCount}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        
+        {/* Legend */}
+        <div className="mt-4 flex items-center justify-center gap-4 text-sm text-gray-600">
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+            <span>1-2 tasks</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+            <span>3-4 tasks</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+            <span>5+ tasks</span>
+          </div>
+          <div className="mx-2 h-4 border-l border-gray-300"></div>
+          <div className="flex items-center gap-1">
+            <span className="text-lg">😢</span>
+            <span>Low mood</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-lg">😊</span>
+            <span>Good mood</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderTimeline = () => {
+    const today = new Date().toDateString();
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowString = tomorrow.toDateString();
+    
+    const todaySchedule = scheduledTasks[today] || {};
+    const tomorrowSchedule = scheduledTasks[tomorrowString] || {};
+    const currentHour = new Date().getHours();
+    
+    // Create array of next 24 hours starting from current hour
+    const hours = Array.from({ length: 24 }, (_, i) => {
+      const hour = (currentHour + i) % 24;
+      const isNextDay = currentHour + i >= 24;
+      return { hour, isNextDay };
+    });
+    
+    return (
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <h2 className="text-xl font-semibold text-gray-800 mb-6 text-center flex items-center justify-center gap-2">
+          <Clock size={20} />
+          Today's Schedule
+        </h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto">
+          {hours.map(({ hour, isNextDay }, index) => {
+            const schedule = isNextDay ? tomorrowSchedule : todaySchedule;
+            const scheduledTask = schedule[hour];
+            const isCurrentHour = index === 0; // First item is always current hour
+            const timeString = hour === 0 ? '12:00 AM' : 
+                             hour < 12 ? `${hour}:00 AM` : 
+                             hour === 12 ? '12:00 PM' : 
+                             `${hour - 12}:00 PM`;
+            
+            const dayLabel = isNextDay ? ' (Tomorrow)' : '';
+            
+            return (
+              <div
+                key={`${isNextDay ? 'tomorrow' : 'today'}-${hour}`}
+                data-hour={hour}
+                data-day={isNextDay ? 'tomorrow' : 'today'}
+                className={`flex items-center gap-4 p-3 rounded-lg border-2 border-dashed transition-all ${
+                  scheduledTask 
+                    ? 'border-green-300 bg-green-50' 
+                    : 'border-gray-300 hover:border-blue-300 hover:bg-blue-50'
+                } ${isCurrentHour ? 'ring-2 ring-blue-500 ring-opacity-50 bg-blue-50' : ''} ${
+                  isDragging ? 'border-blue-400 bg-blue-100' : ''
+                } ${
+                  // Highlight overdue tasks
+                  scheduledTask && !scheduledTask.completed && !isNextDay && hour < currentHour 
+                    ? 'ring-2 ring-orange-400 bg-orange-50 border-orange-300' 
+                    : ''
+                }`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('Dragover on time slot:', hour, isNextDay ? 'tomorrow' : 'today');
+                }}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('Dragenter on time slot:', hour, isNextDay ? 'tomorrow' : 'today');
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('DROP ON TIME SLOT:', hour, isNextDay ? 'tomorrow' : 'today');
+                  handleTimeSlotDrop(e, hour, isNextDay);
+                }}
+              >
+                <div className={`text-sm font-mono w-28 ${isCurrentHour ? 'text-blue-600 font-bold' : 'text-gray-600'}`}>
+                  {timeString}{dayLabel}
+                </div>
+                
+                <div className="flex-1">
+                  {scheduledTask ? (
+                    <div 
+                      className={`${scheduledTask.color} p-3 rounded-lg shadow-sm flex items-center justify-between cursor-move relative ${
+                        // Add visual indicator for overdue tasks
+                        !scheduledTask.completed && !isNextDay && hour < currentHour
+                          ? 'ring-2 ring-orange-400 ring-opacity-60'
+                          : ''
+                      }`}
+                      draggable={true}
+                      onDragStart={(e) => {
+                        console.log('SCHEDULED TASK DRAG START:', scheduledTask.text);
+                        setDraggedTask(scheduledTask);
+                        setIsDragging(true);
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', JSON.stringify(scheduledTask));
+                        console.log('Set data transfer for scheduled task:', JSON.stringify(scheduledTask));
+                      }}
+                      onDragEnd={(e) => {
+                        console.log('SCHEDULED TASK DRAG END');
+                        setIsDragging(false);
+                        setDraggedTask(null);
+                      }}
+                    >
+                      {/* Overdue indicator */}
+                      {!scheduledTask.completed && !isNextDay && hour < currentHour && (
+                        <div className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs px-1 py-0.5 rounded-full animate-pulse">
+                          ⏰
+                        </div>
+                      )}
+                      
+                      <span className="text-sm font-medium text-gray-800">{scheduledTask.text}</span>
+                      <button
+                        onClick={() => removeScheduledTask(hour, isNextDay)}
+                        className="text-red-500 hover:text-red-700 transition-all p-1 hover:bg-red-100 rounded"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-400 italic py-3">
+                      Drop a task here to schedule it
+                    </div>
+                  )}
+                </div>
+                
+                {isCurrentHour && (
+                  <div className="text-xs text-blue-600 font-semibold bg-blue-100 px-2 py-1 rounded">
+                    Now
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        
+        {/* Instructions - moved to bottom */}
+        <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+          <p className="text-sm text-blue-800">
+            💡 <strong>Desktop:</strong> Drag any task from the Tasks tab onto a time slot above to schedule it!
+            <br />
+            📱 <strong>Mobile:</strong> Hold down a task, then drag it to the Timeline button (auto-switches) or directly to a time slot. You'll feel a vibration when dragging starts.
+            <br />
+            ⏰ <strong>Auto-Reschedule:</strong> If a task's scheduled time passes (with 15min grace period), it automatically moves 3 hours ahead to the next available slot.
+            <br />
+            🔔 <strong>Notifications:</strong> You'll receive a reminder 15 minutes before any scheduled task starts (browser notifications must be enabled).
+            <br />
+            🕐 <strong>Business Hours:</strong> Tasks marked with 🕐 are only available during business hours (7 AM - 6 PM) and will be grayed out outside these times.
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 p-4">
+      {/* Import Confirmation Modal */}
+      {showImportConfirm && importPreviewData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                  🔄 Import Data Preview
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowImportConfirm(false);
+                    setImportPreviewData(null);
+                  }}
+                  className="text-gray-500 hover:text-gray-700 p-2 hover:bg-gray-100 rounded-full transition-all"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              {(() => {
+                const data = importPreviewData.data;
+                const taskCount = data.tasks?.length || 0;
+                const completedCount = data.tasks?.filter(t => t.completed).length || 0;
+                const achievementCount = data.achievements?.length || 0;
+                const customGoalCount = data.customGoals?.length || 0;
+                const moodEntryCount = Object.keys(data.moodEntries || {}).length;
+                
+                return (
+                  <>
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <h3 className="font-semibold text-blue-900 mb-3">📊 Import Summary:</h3>
+                      <div className="space-y-2 text-sm text-blue-800">
+                        <div className="flex items-center justify-between">
+                          <span>📝 Tasks:</span>
+                          <span className="font-semibold">{taskCount} ({completedCount} completed)</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>⭐ Points:</span>
+                          <span className="font-semibold">{data.points || 0}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>🏆 Achievements:</span>
+                          <span className="font-semibold">{achievementCount}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>🎯 Custom Goals:</span>
+                          <span className="font-semibold">{customGoalCount}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>🌟 Mood Entries:</span>
+                          <span className="font-semibold">{moodEntryCount}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>📅 Categories:</span>
+                          <span className="font-semibold text-xs">{(data.categories || []).join(', ')}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-orange-50 border-l-4 border-orange-400 p-4">
+                      <div className="flex items-start gap-2">
+                        <span className="text-orange-500 text-xl">⚠️</span>
+                        <div className="text-sm text-orange-800">
+                          <p className="font-semibold mb-1">Warning: This will REPLACE all your current data!</p>
+                          <p>Make sure to export your current data first if you want to keep it as a backup.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+            
+            <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowImportConfirm(false);
+                  setImportPreviewData(null);
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmImport}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition-all font-semibold"
+              >
+                ✅ Import Data
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Motivation Modal */}
+      {showMotivation && currentMotivationMessage && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="relative">
+            {/* Animated background gradient */}
+            <div className={`absolute inset-0 bg-gradient-to-r ${currentMotivationMessage.color} opacity-90 rounded-2xl animate-pulse`}></div>
+            
+            <div className="relative bg-white bg-opacity-95 backdrop-blur-sm rounded-2xl shadow-2xl max-w-lg w-full p-8 border border-white border-opacity-20">
+              {/* Close button */}
+              <button
+                onClick={() => setShowMotivation(false)}
+                className="absolute -top-3 -right-3 bg-white hover:bg-gray-100 text-gray-600 hover:text-gray-800 p-3 rounded-full shadow-lg transition-all hover:scale-110"
+                title="Close"
+              >
+                <X size={20} />
+              </button>
+              
+              {/* Message content */}
+              <div className="text-center">
+                {/* Large emoji */}
+                <div className="text-8xl mb-6 animate-bounce">
+                  {currentMotivationMessage.emoji}
+                </div>
+                
+                {/* Message text */}
+                <blockquote className="text-xl font-medium text-gray-800 leading-relaxed mb-6 italic">
+                  "{currentMotivationMessage.message}"
+                </blockquote>
+                
+                {/* Message type badge */}
+                <div className="flex items-center justify-center mb-6">
+                  <span className={`px-4 py-2 rounded-full text-sm font-semibold text-white bg-gradient-to-r ${currentMotivationMessage.color} shadow-lg`}>
+                    {currentMotivationMessage.type === 'existential' ? '🤔 Deep Thought' :
+                     currentMotivationMessage.type === 'suggestion' ? '💡 Pro Tip' :
+                     '💪 Motivation'}
+                  </span>
+                </div>
+                
+                {/* Action buttons */}
+                <div className="flex items-center justify-center gap-4">
+                  <button
+                    onClick={() => {
+                      const newMessage = getRandomMotivation();
+                      setCurrentMotivationMessage(newMessage);
+                    }}
+                    className={`bg-gradient-to-r ${currentMotivationMessage.color} hover:scale-105 text-white px-6 py-3 rounded-lg font-medium shadow-lg transition-all flex items-center gap-2`}
+                  >
+                    🔄 Another Message
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      setShowMotivation(false);
+                      // Auto-open task selector for immediate action
+                      if (allIncompleteTasks.length > 0) {
+                        setShowTaskSelector(true);
+                      }
+                    }}
+                    className="bg-white hover:bg-gray-50 text-gray-700 hover:text-gray-900 px-6 py-3 rounded-lg font-medium shadow-lg transition-all border-2 border-gray-200 hover:border-gray-300 flex items-center gap-2"
+                  >
+                    🎯 Let's Do This!
+                  </button>
+                </div>
+                
+                {/* Subtle encouragement */}
+                <p className="text-sm text-gray-600 mt-4 opacity-75">
+                  You've already taken the first step by seeking motivation! 🌟
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mood Modal */}
+      {showMoodModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-screen overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                    🌟 How's Your Day?
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">Rate your day and reflect on your experiences</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowMoodModal(false);
+                    setCurrentMoodEntry({ flow: 5, connection: 5, purpose: 5, journal: '' });
+                  }}
+                  className="text-gray-500 hover:text-gray-700 p-2 hover:bg-gray-100 rounded-full transition-all"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Flow Scale */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="font-medium text-gray-800 flex items-center gap-2">
+                    🌊 Flow vs Struggle
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">{getMoodEmoji(currentMoodEntry.flow)}</span>
+                    <span className="font-bold text-lg min-w-[2rem] text-center">{currentMoodEntry.flow}</span>
+                  </div>
+                </div>
+                <div className="px-3">
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    value={currentMoodEntry.flow}
+                    onChange={(e) => setCurrentMoodEntry(prev => ({ ...prev, flow: parseInt(e.target.value) }))}
+                    className="w-full h-2 bg-gradient-to-r from-red-400 via-yellow-400 to-blue-400 rounded-lg appearance-none cursor-pointer"
+                    style={{
+                      background: `linear-gradient(to right, #f87171 0%, #fbbf24 50%, #60a5fa 100%)`
+                    }}
+                  />
+                  <div className="flex justify-between text-xs text-gray-600 mt-1">
+                    <span>😣 Struggling</span>
+                    <span>🌊 In Flow</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Connection Scale */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="font-medium text-gray-800 flex items-center gap-2">
+                    🤝 Lonely vs Connected
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">{getMoodEmoji(currentMoodEntry.connection)}</span>
+                    <span className="font-bold text-lg min-w-[2rem] text-center">{currentMoodEntry.connection}</span>
+                  </div>
+                </div>
+                <div className="px-3">
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    value={currentMoodEntry.connection}
+                    onChange={(e) => setCurrentMoodEntry(prev => ({ ...prev, connection: parseInt(e.target.value) }))}
+                    className="w-full h-2 bg-gradient-to-r from-purple-400 via-pink-400 to-green-400 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="flex justify-between text-xs text-gray-600 mt-1">
+                    <span>😔 Lonely</span>
+                    <span>🤗 Connected</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Purpose Scale */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="font-medium text-gray-800 flex items-center gap-2">
+                    🎯 Aimless vs Purposeful
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">{getMoodEmoji(currentMoodEntry.purpose)}</span>
+                    <span className="font-bold text-lg min-w-[2rem] text-center">{currentMoodEntry.purpose}</span>
+                  </div>
+                </div>
+                <div className="px-3">
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    value={currentMoodEntry.purpose}
+                    onChange={(e) => setCurrentMoodEntry(prev => ({ ...prev, purpose: parseInt(e.target.value) }))}
+                    className="w-full h-2 bg-gradient-to-r from-gray-400 via-orange-400 to-indigo-400 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="flex items-center justify-between text-xs text-gray-600 mt-1">
+                    <span>😕 Aimless</span>
+                    <span>🎯 Purposeful</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Overall Mood Preview */}
+              <div className="bg-gray-50 p-4 rounded-lg border">
+                <div className="text-center">
+                  <div className="text-3xl mb-2">
+                    {getMoodEmoji(Math.round((currentMoodEntry.flow + currentMoodEntry.connection + currentMoodEntry.purpose) / 3))}
+                  </div>
+                  <div className="text-sm font-medium text-gray-700">
+                    Overall Mood: {Math.round((currentMoodEntry.flow + currentMoodEntry.connection + currentMoodEntry.purpose) / 3)}/10
+                  </div>
+                </div>
+              </div>
+
+              {/* Journal Section */}
+              <div className="space-y-3">
+                <label className="font-medium text-gray-800 flex items-center gap-2">
+                  📔 Journal Entry (Optional)
+                </label>
+                <textarea
+                  value={currentMoodEntry.journal}
+                  onChange={(e) => setCurrentMoodEntry(prev => ({ ...prev, journal: e.target.value }))}
+                  placeholder="How was your day? What made it special, challenging, or memorable? Any thoughts or reflections..."
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 h-24 resize-none"
+                  maxLength={500}
+                />
+                <div className="text-xs text-gray-500 text-right">
+                  {currentMoodEntry.journal.length}/500 characters
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-gray-200 flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                💡 Daily reflection helps improve wellbeing
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setShowMoodModal(false);
+                    setCurrentMoodEntry({ flow: 5, connection: 5, purpose: 5, journal: '' });
+                  }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveMoodEntry}
+                  className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white px-6 py-2 rounded-lg transition-all flex items-center gap-2"
+                >
+                  Save Entry (+15 pts) ✨
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Focus Mode Overlay */}
+      {focusMode && focusTask && (
+        <div className="fixed inset-0 bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black bg-opacity-50"></div>
+          
+          {/* Focus Mode Content */}
+          <div className="relative z-10 max-w-2xl w-full text-center">
+            {/* Exit Button */}
+            <button
+              onClick={exitFocusMode}
+              className="absolute -top-16 right-0 bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-3 rounded-full transition-all"
+              title="Exit Focus Mode"
+            >
+              <X size={24} />
+            </button>
+            
+            {/* Focus Header */}
+            <div className="mb-12">
+              <div className="text-6xl mb-4">🎯</div>
+              <h1 className="text-4xl font-bold text-white mb-2">Focus Mode</h1>
+              <p className="text-xl text-purple-200">Deep work session in progress</p>
+            </div>
+            
+            {/* Current Task */}
+            <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-2xl p-8 mb-8 border border-white border-opacity-20">
+              <h2 className="text-2xl font-semibold text-white mb-4">Current Task</h2>
+              <div className={`${focusTask.color} p-6 rounded-xl shadow-lg transform hover:scale-105 transition-all`}>
+                <p className="text-lg font-medium text-gray-800">{focusTask.text}</p>
+                <div className="mt-4 flex items-center justify-center gap-4 text-sm text-gray-600">
+                  <span>Importance: {focusTask.importance || 5}/10</span>
+                  <span>•</span>
+                  <span>Urgency: {focusTask.urgency || 5}/10</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Timer Display */}
+            <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-2xl p-8 mb-8 border border-white border-opacity-20">
+              <div className="text-8xl font-mono font-bold text-white mb-4">
+                {formatTime(focusTimeLeft)}
+              </div>
+              
+              {/* Progress Bar */}
+              <div className="w-full bg-white bg-opacity-20 rounded-full h-4 mb-4">
+                <div 
+                  className="bg-gradient-to-r from-green-400 to-blue-500 h-4 rounded-full transition-all duration-1000 ease-out"
+                  style={{ 
+                    width: `${((15 * 60 - focusTimeLeft) / (15 * 60)) * 100}%` 
+                  }}
+                ></div>
+              </div>
+              
+              <div className="text-lg text-purple-200">
+                {focusTimeLeft > 0 ? 'Stay focused! You\'ve got this! 💪' : '🎉 Session Complete!'}
+              </div>
+              
+              {/* Time milestones */}
+              <div className="mt-6 grid grid-cols-3 gap-4 text-sm">
+                <div className={`p-3 rounded-lg ${focusTimeLeft <= 10 * 60 ? 'bg-green-500 bg-opacity-20 text-green-200' : 'bg-white bg-opacity-10 text-purple-200'}`}>
+                  <div className="font-semibold">5 min</div>
+                  <div className="text-xs">Warmed up</div>
+                </div>
+                <div className={`p-3 rounded-lg ${focusTimeLeft <= 5 * 60 ? 'bg-yellow-500 bg-opacity-20 text-yellow-200' : 'bg-white bg-opacity-10 text-purple-200'}`}>
+                  <div className="font-semibold">10 min</div>
+                  <div className="text-xs">Deep focus</div>
+                </div>
+                <div className={`p-3 rounded-lg ${focusTimeLeft <= 0 ? 'bg-purple-500 bg-opacity-20 text-purple-200' : 'bg-white bg-opacity-10 text-purple-200'}`}>
+                  <div className="font-semibold">15 min</div>
+                  <div className="text-xs">Master!</div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Motivational Tips */}
+            <div className="text-center">
+              <div className="text-sm text-purple-200 mb-4">
+                💡 <strong>Focus Tips:</strong>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-purple-300">
+                <div>• Put your phone in another room</div>
+                <div>• Take deep breaths if distracted</div>
+                <div>• Break big tasks into smaller steps</div>
+                <div>• Reward yourself after completion</div>
+              </div>
+            </div>
+            
+            {/* Stats */}
+            <div className="mt-8 flex items-center justify-center gap-8 text-sm text-purple-200">
+              <div className="flex items-center gap-2">
+                <Trophy size={16} />
+                <span>{focusSessionsCompleted} sessions completed</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Star size={16} />
+                <span>+35 points on completion</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Goals Modal */}
+      {showGoalsModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-96 overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                    🎯 Custom Goals
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">Create and track your personalized achievements</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowCreateGoal(true)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-all flex items-center gap-2"
+                  >
+                    <Plus size={16} />
+                    New Goal
+                  </button>
+                  <button
+                    onClick={() => setShowGoalsModal(false)}
+                    className="text-gray-500 hover:text-gray-700 p-2 hover:bg-gray-100 rounded-full transition-all"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 overflow-y-auto max-h-80">
+              {customGoals.length > 0 ? (
+                <div className="space-y-4">
+                  {customGoals.map((goal) => {
+                    const progressPercentage = Math.min(100, (goal.progress / goal.target) * 100);
+                    const typeIcon = {
+                      tasks: '📝',
+                      points: '⭐',
+                      focus: '🎯',
+                      streak: '🔥'
+                    };
+                    
+                    return (
+                      <div
+                        key={goal.id}
+                        className={`p-4 rounded-lg border-2 transition-all ${
+                          goal.completed 
+                            ? 'border-green-300 bg-green-50' 
+                            : 'border-purple-200 bg-purple-50 hover:border-purple-300'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                              {typeIcon[goal.type]} {goal.title}
+                              {goal.completed && <span className="text-green-600 text-sm">✓ Completed</span>}
+                            </h3>
+                            <p className="text-sm text-gray-600 mt-1">{goal.description}</p>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="text-right text-sm">
+                              <div className="font-semibold text-purple-600">+{goal.reward} pts</div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                if (confirm(`Delete goal "${goal.title}"?${goal.completed ? ' This will remove bonus points.' : ''}`)) {
+                                  deleteCustomGoal(goal.id);
+                                }
+                              }}
+                              className="text-red-500 hover:text-red-700 transition-all p-1 hover:bg-red-100 rounded"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        </div>
+                        
+                        {/* Progress Bar */}
+                        <div className="mb-2">
+                          <div className="flex items-center justify-between text-sm mb-1">
+                            <span className="text-gray-600">
+                              Progress: {goal.progress}/{goal.target}
+                            </span>
+                            <span className="text-gray-600">
+                              {Math.round(progressPercentage)}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div 
+                              className={`h-3 rounded-full transition-all duration-500 ${
+                                goal.completed ? 'bg-green-500' : 'bg-purple-500'
+                              }`}
+                              style={{ width: `${progressPercentage}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                        
+                        {/* Goal Type and Target */}
+                        <div className="flex items-center justify-between text-xs text-gray-500">
+                          <span>
+                            Type: {goal.type.charAt(0).toUpperCase() + goal.type.slice(1)}
+                          </span>
+                          {goal.completed && (
+                            <span>
+                              Completed: {new Date(goal.completedAt).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="text-6xl mb-4">🎯</div>
+                  <p className="text-gray-500 text-lg">No custom goals yet</p>
+                  <p className="text-gray-400 text-sm">Create your first personalized achievement!</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Goal Modal */}
+      {showCreateGoal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                  ➕ Create New Goal
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowCreateGoal(false);
+                    setNewGoalTitle('');
+                    setNewGoalDescription('');
+                    setNewGoalType('tasks');
+                    setNewGoalTarget(5);
+                  }}
+                  className="text-gray-500 hover:text-gray-700 p-2 hover:bg-gray-100 rounded-full transition-all"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              {/* Goal Title */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Goal Title *
+                </label>
+                <input
+                  type="text"
+                  value={newGoalTitle}
+                  onChange={(e) => setNewGoalTitle(e.target.value)}
+                  placeholder="e.g., Complete 20 tasks this week"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  maxLength={50}
+                />
+              </div>
+              
+              {/* Goal Description */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description *
+                </label>
+                <textarea
+                  value={newGoalDescription}
+                  onChange={(e) => setNewGoalDescription(e.target.value)}
+                  placeholder="Describe what you want to achieve..."
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 h-20 resize-none"
+                  maxLength={100}
+                />
+              </div>
+              
+              {/* Goal Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Goal Type
+                </label>
+                <select
+                  value={newGoalType}
+                  onChange={(e) => {
+                    setNewGoalType(e.target.value);
+                    // Set sensible defaults for different types
+                    const defaults = {
+                      tasks: 10,
+                      points: 200,
+                      focus: 3,
+                      streak: 7
+                    };
+                    setNewGoalTarget(defaults[e.target.value] || 5);
+                  }}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="tasks">📝 Completed Tasks</option>
+                  <option value="points">⭐ Total Points</option>
+                  <option value="focus">🎯 Focus Sessions</option>
+                  <option value="streak">🔥 Daily Streak</option>
+                </select>
+              </div>
+              
+              {/* Target Value */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Target {newGoalType === 'tasks' ? 'Tasks' : 
+                          newGoalType === 'points' ? 'Points' :
+                          newGoalType === 'focus' ? 'Sessions' : 'Days'}
+                </label>
+                <input
+                  type="number"
+                  value={newGoalTarget}
+                  onChange={(e) => setNewGoalTarget(Math.max(1, parseInt(e.target.value) || 1))}
+                  min="1"
+                  max="1000"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Reward: +{Math.max(10, Math.floor(newGoalTarget * (newGoalType === 'points' ? 0.1 : 5)))} points
+                </p>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-gray-200 flex items-center justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowCreateGoal(false);
+                  setNewGoalTitle('');
+                  setNewGoalDescription('');
+                  setNewGoalType('tasks');
+                  setNewGoalTarget(5);
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createCustomGoal}
+                disabled={!newGoalTitle.trim() || !newGoalDescription.trim()}
+                className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg transition-all"
+              >
+                Create Goal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Task Selector Modal */}
+      {showTaskSelector && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-96 overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                    🎯 Choose Task to Focus On
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">Select a task for your 15-minute focus session</p>
+                </div>
+                <button
+                  onClick={() => setShowTaskSelector(false)}
+                  className="text-gray-500 hover:text-gray-700 p-2 hover:bg-gray-100 rounded-full transition-all"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 overflow-y-auto max-h-80">
+              {allIncompleteTasks.length > 0 ? (
+                <div className="space-y-3">
+                  {allIncompleteTasks.map((task) => {
+                    const priority = getTaskPriority(task.importance || 5, task.urgency || 5);
+                    const scheduledTime = getTaskScheduledTime(task.id);
+                    
+                    return (
+                      <button
+                        key={task.id}
+                        onClick={() => startFocusMode(task)}
+                        className={`w-full text-left ${task.color} p-4 rounded-lg shadow-sm hover:shadow-md transform hover:scale-102 transition-all border-2 border-transparent hover:border-indigo-300`}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <p className="font-medium text-gray-800 pr-4">{task.text}</p>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className={`px-2 py-1 rounded-full text-xs font-semibold ${priority.color} ${priority.bgColor}`}>
+                              {priority.label}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center justify-between text-xs text-gray-600">
+                          <span className="bg-gray-100 px-2 py-1 rounded">{task.category}</span>
+                          
+                          <div className="flex items-center gap-3">
+                            {scheduledTime && (
+                              <div className="flex items-center gap-1 text-blue-600">
+                                <Clock size={10} />
+                                <span>{scheduledTime}</span>
+                              </div>
+                            )}
+                            <span>I: {task.importance || 5}</span>
+                            <span>U: {task.urgency || 5}</span>
+                          </div>
+                        </div>
+                        
+                        <div className="mt-3 text-center">
+                          <div className="inline-flex items-center gap-2 bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-semibold">
+                            <Clock size={12} />
+                            Start 15-min Focus Session
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="text-6xl mb-4">✅</div>
+                  <p className="text-gray-500 text-lg">No tasks available for focus</p>
+                  <p className="text-gray-400 text-sm">Add some tasks first, or all your tasks are already completed!</p>
+                </div>
+              )}
+            </div>
+            
+            {allIncompleteTasks.length > 0 && (
+              <div className="p-4 bg-gray-50 border-t border-gray-200">
+                <p className="text-xs text-gray-600 text-center">
+                  💡 Tip: Tasks with higher priority (Importance + Urgency) appear first
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {/* Custom Slider Styles */}
+      <style jsx>{`
+        .slider-importance::-webkit-slider-thumb {
+          appearance: none;
+          height: 16px;
+          width: 16px;
+          border-radius: 50%;
+          background: #3b82f6;
+          cursor: pointer;
+          border: 2px solid white;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .slider-urgency::-webkit-slider-thumb {
+          appearance: none;
+          height: 16px;
+          width: 16px;
+          border-radius: 50%;
+          background: #8b5cf6;
+          cursor: pointer;
+          border: 2px solid white;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .slider-importance::-moz-range-thumb,
+        .slider-urgency::-moz-range-thumb {
+          height: 16px;
+          width: 16px;
+          border-radius: 50%;
+          cursor: pointer;
+          border: 2px solid white;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .slider-importance::-moz-range-thumb {
+          background: #3b82f6;
+        }
+        .slider-urgency::-moz-range-thumb {
+          background: #8b5cf6;
+        }
+      `}</style>
+      {/* Header */}
+      <div className="max-w-4xl mx-auto mb-6">
+        <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+              <img 
+                src="https://i.imgur.com/8xQJ6gK.png" 
+                alt="Gooby" 
+                className="w-8 h-8"
+              />
+              Gooby Tasks
+            </h1>
+            <div className="flex items-center gap-4">
+              <div className="bg-yellow-400 px-3 py-1 rounded-full">
+                <span className="font-bold text-yellow-900">⭐ {points} points</span>
+              </div>
+              <div className="text-sm text-gray-600">
+                🏆 {achievements.length}/{achievementList.length} achievements
+              </div>
+              <div className="text-sm text-gray-600 flex items-center gap-1">
+                <Clock size={14} />
+                {focusSessionsCompleted} focus sessions
+              </div>
+              {/* Business Hours Indicator */}
+              <div className={`text-sm px-3 py-1 rounded-full font-medium flex items-center gap-1 ${
+                isBusinessHours() 
+                  ? 'bg-green-100 text-green-700 border border-green-300' 
+                  : 'bg-orange-100 text-orange-700 border border-orange-300'
+              }`}>
+                🕐 {isBusinessHours() ? 'Business Hours' : 'After Hours'}
+                <span className="text-xs opacity-75">
+                  ({currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                </span>
+              </div>
+              
+              {/* Notification Status */}
+              {typeof Notification !== 'undefined' && (
+                <button
+                  onClick={() => {
+                    if (Notification.permission === 'default') {
+                      Notification.requestPermission().then(permission => {
+                        if (permission === 'granted') {
+                          new Notification('✅ Notifications Enabled!', {
+                            body: 'You\'ll now receive reminders 15 minutes before scheduled tasks.',
+                            icon: '🔔'
+                          });
+                        }
+                      });
+                    } else if (Notification.permission === 'granted') {
+                      alert('🔔 Notifications are enabled! You\'ll receive reminders 15 minutes before scheduled tasks.');
+                    } else {
+                      alert('⚠️ Notifications are blocked. Please enable them in your browser settings to receive task reminders.');
+                    }
+                  }}
+                  className={`text-sm px-3 py-1 rounded-full font-medium flex items-center gap-1 cursor-pointer transition-all ${
+                    Notification.permission === 'granted'
+                      ? 'bg-green-100 text-green-700 border border-green-300 hover:bg-green-200'
+                      : Notification.permission === 'denied'
+                      ? 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200'
+                      : 'bg-yellow-100 text-yellow-700 border border-yellow-300 hover:bg-yellow-200 animate-pulse'
+                  }`}
+                  title={
+                    Notification.permission === 'granted'
+                      ? 'Notifications enabled - Click for info'
+                      : Notification.permission === 'denied'
+                      ? 'Notifications blocked - Click to learn more'
+                      : 'Click to enable task notifications'
+                  }
+                >
+                  {Notification.permission === 'granted' ? '🔔' : Notification.permission === 'denied' ? '🔕' : '🔔'}
+                  {Notification.permission === 'granted' ? 'Enabled' : Notification.permission === 'denied' ? 'Blocked' : 'Enable'}
+                </button>
+              )}
+              <div className="flex items-center gap-2">
+                {/* Export Data Button */}
+                <button
+                  onClick={exportData}
+                  className="text-xs text-blue-500 hover:text-blue-700 transition-all px-2 py-1 rounded hover:bg-blue-100 flex items-center gap-1"
+                  title="Export all data to file"
+                >
+                  💾 Export
+                </button>
+                
+                {/* Import Data Button */}
+                <label className="text-xs text-green-500 hover:text-green-700 transition-all px-2 py-1 rounded hover:bg-green-100 cursor-pointer flex items-center gap-1">
+                  📁 Import
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={importData}
+                    className="hidden"
+                  />
+                </label>
+                
+                {/* Reset Button */}
+                <button
+                  onClick={() => {
+                    if (confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+                      // Clear all localStorage
+                      ['tasks', 'categories', 'selectedCategory', 'points', 'achievements', 'activeTab', 'taskHistory', 'scheduledTasks', 'focusSessionsCompleted', 'customGoals', 'moodEntries'].forEach(key => {
+                        localStorage.removeItem(`stickyTasks_${key}`);
+                      });
+                      // Reset to defaults
+                      setTasks([]);
+                      setCategories(['Personal', 'Work', 'Shopping']);
+                      setSelectedCategory('Personal');
+                      setPoints(0);
+                      setAchievements([]);
+                      setActiveTab('tasks');
+                      setTaskHistory({});
+                      setScheduledTasks({});
+                      setFocusSessionsCompleted(0);
+                      setCustomGoals([]);
+                      setMoodEntries({});
+                      alert('All data has been cleared!');
+                    }
+                  }}
+                  className="text-xs text-gray-500 hover:text-red-500 transition-all px-2 py-1 rounded hover:bg-gray-100"
+                  title="Clear all data"
+                >
+                  🗑️ Reset
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setActiveTab('tasks')}
+                className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                  activeTab === 'tasks'
+                    ? 'bg-blue-500 text-white shadow-md'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                📝 Tasks
+              </button>
+              <button
+                onClick={() => setActiveTab('calendar')}
+                className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                  activeTab === 'calendar'
+                    ? 'bg-blue-500 text-white shadow-md'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                <Calendar size={16} />
+                Calendar
+              </button>
+              <button
+                onClick={() => setActiveTab('timeline')}
+                data-timeline-button="true"
+                className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                  activeTab === 'timeline'
+                    ? 'bg-blue-500 text-white shadow-md'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                } ${isDragging ? 'ring-2 ring-blue-400 bg-blue-100 text-blue-800' : ''}`}
+              >
+                <Clock size={16} />
+                Timeline
+              </button>
+              <button
+                onClick={() => setActiveTab('completed')}
+                className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                  activeTab === 'completed'
+                    ? 'bg-blue-500 text-white shadow-md'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                ✅ Completed
+                {tasks.filter(task => task.completed).length > 0 && (
+                  <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full">
+                    {tasks.filter(task => task.completed).length}
+                  </span>
+                )}
+              </button>
+              
+              {/* Focus and Goals Buttons */}
+              <div className="flex items-center gap-2 ml-4">
+                <button
+                  onClick={() => setShowTaskSelector(true)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white w-12 h-12 flex items-center justify-center rounded-full shadow-lg transition-all hover:scale-105"
+                  title="Start Focus Mode"
+                >
+                  <Clock size={20} />
+                </button>
+                
+                <button
+                  onClick={() => setShowGoalsModal(true)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white w-12 h-12 flex items-center justify-center rounded-full shadow-lg transition-all hover:scale-105"
+                  title="Custom Goals"
+                >
+                  <Target size={20} />
+                </button>
+                
+                {/* Mood Button - Round floating style */}
+                <button
+                  onClick={() => setShowMoodModal(true)}
+                  className={`relative w-12 h-12 flex items-center justify-center rounded-full shadow-lg transition-all hover:scale-110 ${
+                    hasLoggedMoodToday 
+                      ? 'bg-gradient-to-r from-green-400 to-emerald-500 hover:from-green-500 hover:to-emerald-600' 
+                      : `bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 ${currentTime.getHours() >= 17 ? 'animate-pulse' : ''}`
+                  }`}
+                  title={hasLoggedMoodToday ? 'Mood logged today!' : 'How\'s your day going?'}
+                >
+                  <span className="text-2xl">
+                    {hasLoggedMoodToday ? '😊' : '🌟'}
+                  </span>
+                  
+                  {/* Notification dot for unlogged mood - only show after 5pm */}
+                  {!hasLoggedMoodToday && currentTime.getHours() >= 17 && (
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-bounce"></div>
+                  )}
+                  
+                  {/* Today's mood preview if logged */}
+                  {hasLoggedMoodToday && (() => {
+                    const today = new Date().toDateString();
+                    const todayMood = moodEntries[today];
+                    return todayMood && (
+                      <div className="absolute -bottom-1 -right-1 bg-white text-gray-800 text-xs px-1.5 py-0.5 rounded-full border border-gray-300 font-bold min-w-[20px] text-center">
+                        {todayMood.overallScore}
+                      </div>
+                    );
+                  })()}
+                </button>
+                
+                {/* Motivate Me Button */}
+                <button
+                  onClick={() => {
+                    const message = getRandomMotivation();
+                    setCurrentMotivationMessage(message);
+                    setShowMotivation(true);
+                  }}
+                  className="bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white w-12 h-12 flex items-center justify-center rounded-full shadow-lg transition-all hover:scale-110 animate-pulse"
+                  title="Motivate Me!"
+                >
+                  <span className="text-xl">💫</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {/* Categories - Always visible */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm text-gray-600 font-medium mr-2">Categories:</span>
+            {categories.map(category => (
+              <button
+                key={category}
+                onClick={() => {
+                  setSelectedCategory(category);
+                  if (activeTab !== 'tasks') setActiveTab('tasks');
+                }}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  selectedCategory === category && activeTab === 'tasks'
+                    ? 'bg-green-500 text-white shadow-md'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                {category}
+                {tasks.filter(t => t.category === category).length > 0 && (
+                  <span className="ml-2 text-xs opacity-75">
+                    ({tasks.filter(t => t.category === category && t.completed).length}/
+                    {tasks.filter(t => t.category === category).length})
+                  </span>
+                )}
+              </button>
+            ))}
+            <button
+              onClick={() => setShowAddCategory(true)}
+              className="px-4 py-2 rounded-lg border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-600 transition-all"
+            >
+              + Add Category
+            </button>
+          </div>
+          
+          {/* Add Category Form */}
+          {showAddCategory && (
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="Enter category name..."
+                  className="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onKeyPress={(e) => e.key === 'Enter' && addCategory()}
+                  autoFocus
+                />
+                <button
+                  onClick={addCategory}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition-all"
+                >
+                  Add
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAddCategory(false);
+                    setNewCategoryName('');
+                  }}
+                  className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-4xl mx-auto relative">
+        {/* Mobile Drag Preview */}
+        {dragPreview && (
+          <div
+            className={`fixed pointer-events-none z-50 ${dragPreview.task.color} p-3 rounded-lg shadow-2xl transform rotate-3 scale-90 opacity-90 border-2 border-blue-400`}
+            style={{
+              left: dragPreview.x,
+              top: dragPreview.y,
+              transform: 'translate(-50%, -50%) rotate(3deg) scale(0.9)'
+            }}
+          >
+            <p className="text-sm font-medium text-gray-800">
+              {dragPreview.task.text}
+            </p>
+            <div className="text-xs text-blue-600 font-semibold mt-1">
+              {activeTab === 'timeline' ? '📍 Drop on time slot' : '👆 Drag to Timeline button'}
+            </div>
+          </div>
+        )}
+        {activeTab === 'tasks' && (
+          <div className="bg-white rounded-lg shadow-lg p-6 min-h-96">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-800">
+                  {selectedCategory} Tasks
+                  {currentTasks.length > 0 && (
+                    <span className="ml-2 text-sm text-gray-500">
+                      ({completedCount}/{currentTasks.length} completed)
+                    </span>
+                  )}
+                </h2>
+                {/* Sort Options */}
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs text-gray-600">Sort by:</span>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="text-xs px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="default">Newest First</option>
+                    <option value="priority">Priority (I + U)</option>
+                    <option value="importance">Importance</option>
+                    <option value="urgency">Urgency</option>
+                  </select>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAddTask(true)}
+                className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-full shadow-lg transition-all hover:scale-105"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
+
+            {/* Add Task Form */}
+            {showAddTask && (
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newTaskText}
+                    onChange={(e) => setNewTaskText(e.target.value)}
+                    placeholder="Enter your task..."
+                    className="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    onKeyPress={(e) => e.key === 'Enter' && addTask()}
+                    autoFocus
+                  />
+                  <button
+                    onClick={addTask}
+                    className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition-all"
+                  >
+                    Add
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAddTask(false);
+                      setNewTaskText('');
+                    }}
+                    className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded transition-all"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tasks Grid with Visual Separation */}
+            <div className="space-y-6">
+              {/* Incomplete Tasks Section */}
+              {sortedIncompleteTasks.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    📋 Active Tasks ({sortedIncompleteTasks.length})
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {sortedIncompleteTasks.map((task) => {
+                      const priority = getTaskPriority(task.importance || 5, task.urgency || 5);
+                      const isScheduled = isTaskScheduled(task.id);
+                      const scheduledTime = getTaskScheduledTime(task.id);
+                      const taskAvailable = isTaskAvailable(task);
+                      
+                      return (
+                        <div
+                          key={task.id}
+                          draggable={!task.completed && taskAvailable}
+                          onDragStart={(e) => {
+                            if (!taskAvailable) {
+                              e.preventDefault();
+                              return;
+                            }
+                            console.log('TASK DRAG START:', task.text);
+                            handleDragStart(e, task);
+                          }}
+                          onDragEnd={(e) => {
+                            console.log('TASK DRAG END');
+                            setIsDragging(false);
+                            setDraggedTask(null);
+                          }}
+                          onDragOver={handleDragOver}
+                          onDrop={(e) => handleDrop(e, task)}
+                          onTouchStart={(e) => taskAvailable && handleTouchStart(e, task)}
+                          onTouchMove={(e) => taskAvailable && handleTouchMove(e, task)}
+                          onTouchEnd={(e) => taskAvailable && handleTouchEnd(e, task)}
+                          onTouchCancel={(e) => taskAvailable && handleTouchEnd(e, task)}
+                          className={`${task.color} p-4 rounded-lg shadow-md transform transition-all hover:scale-105 hover:shadow-lg select-none relative ${
+                            taskAvailable ? 'cursor-move' : 'cursor-not-allowed opacity-50'
+                          } ${
+                            draggedTask?.id === task.id ? 'rotate-3 scale-105 z-40' : ''
+                          } ${
+                            isDragging && draggedTask?.id === task.id ? 'opacity-50' : ''
+                          } ${isScheduled ? 'ring-2 ring-blue-400 ring-opacity-50' : ''} ${
+                            !taskAvailable ? 'grayscale filter' : ''
+                          }`}
+                          style={{
+                            touchAction: taskAvailable ? 'none' : 'auto',
+                            userSelect: 'none',
+                            WebkitUserSelect: 'none',
+                            MozUserSelect: 'none',
+                            msUserSelect: 'none'
+                          }}
+                        >
+                          {/* Business Hours Indicator */}
+                          {task.businessHoursOnly && (
+                            <div className={`absolute -top-2 -left-2 text-xs px-2 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 ${
+                              isBusinessHours() 
+                                ? 'bg-green-500 text-white' 
+                                : 'bg-orange-500 text-white animate-pulse'
+                            }`}>
+                              🕐 {isBusinessHours() ? 'Open' : 'Closed'}
+                            </div>
+                          )}
+
+                          {/* Scheduled Indicator */}
+                          {isScheduled && (
+                            <div className={`absolute -top-2 -right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full shadow-lg flex items-center gap-1 ${
+                              task.businessHoursOnly ? 'right-16' : ''
+                            }`}>
+                              <Clock size={10} />
+                              {scheduledTime}
+                            </div>
+                          )}
+                          
+                          <div className="flex items-start justify-between mb-3">
+                            <button
+                              onClick={() => taskAvailable && toggleTask(task.id)}
+                              disabled={!taskAvailable}
+                              className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                                taskAvailable 
+                                  ? 'border-gray-400 hover:border-green-500 cursor-pointer' 
+                                  : 'border-gray-300 cursor-not-allowed'
+                              }`}
+                              title={!taskAvailable ? 'Available during business hours (7 AM - 6 PM)' : ''}
+                            >
+                            </button>
+                            <div className="flex items-center gap-2">
+                              {/* Business Hours Toggle */}
+                              <button
+                                onClick={() => toggleBusinessHours(task.id)}
+                                className={`p-1 rounded transition-all text-xs ${
+                                  task.businessHoursOnly
+                                    ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                                title={task.businessHoursOnly ? 'Business hours only' : 'Available anytime'}
+                              >
+                                🕐
+                              </button>
+                              <div className={`px-2 py-1 rounded-full text-xs font-semibold ${priority.color} ${priority.bgColor}`}>
+                                {priority.label}
+                              </div>
+                              <button
+                                onClick={() => deleteTask(task.id)}
+                                className="text-red-500 hover:text-red-700 transition-all p-1 hover:bg-red-100 rounded"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                          </div>
+                          
+                          <p className={`text-sm font-medium mb-3 ${
+                            taskAvailable ? 'text-gray-800' : 'text-gray-500'
+                          }`}>
+                            {task.text}
+                            {!taskAvailable && (
+                              <span className="block text-xs text-orange-600 mt-1 font-semibold">
+                                ⏰ Available at 7:00 AM
+                              </span>
+                            )}
+                          </p>
+                          
+                          {/* Priority Sliders */}
+                          <div className="space-y-3">
+                            {/* Importance Slider */}
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs font-semibold text-gray-600 w-3">I</label>
+                              <input
+                                type="range"
+                                min="1"
+                                max="10"
+                                value={task.importance || 5}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  updateTaskSlider(task.id, 'importance', e.target.value);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                disabled={!taskAvailable}
+                                className={`flex-1 h-2 bg-gray-200 rounded-lg appearance-none slider-importance ${
+                                  !taskAvailable ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                                }`}
+                                style={{
+                                  background: `linear-gradient(to right, #ef4444 0%, #f59e0b 50%, #10b981 100%)`
+                                }}
+                              />
+                              <span className="text-xs font-mono text-gray-600 w-6 text-center">
+                                {task.importance || 5}
+                              </span>
+                            </div>
+                            
+                            {/* Urgency Slider */}
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs font-semibold text-gray-600 w-3">U</label>
+                              <input
+                                type="range"
+                                min="1"
+                                max="10"
+                                value={task.urgency || 5}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  updateTaskSlider(task.id, 'urgency', e.target.value);
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                disabled={!taskAvailable}
+                                className={`flex-1 h-2 bg-gray-200 rounded-lg appearance-none slider-urgency ${
+                                  !taskAvailable ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                                }`}
+                                style={{
+                                  background: `linear-gradient(to right, #10b981 0%, #f59e0b 50%, #ef4444 100%)`
+                                }}
+                              />
+                              <span className="text-xs font-mono text-gray-600 w-6 text-center">
+                                {task.urgency || 5}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Schedule Dropbox - between Active and Completed */}
+              {currentTasks.length > 0 && (
+                <div className="border-t border-gray-200 pt-6">
+                  <div
+                    className={`p-6 border-3 border-dashed rounded-xl text-center transition-all ${
+                      isDragging 
+                        ? 'border-green-400 bg-green-50 scale-105 shadow-lg' 
+                        : 'border-gray-300 hover:border-green-300 hover:bg-green-50'
+                    }`}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('Dragover on dropbox');
+                    }}
+                    onDragEnter={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('Dragenter on dropbox');
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('Dragleave on dropbox');
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('DROP EVENT ON DROPBOX!');
+                      const currentHour = new Date().getHours();
+                      
+                      // Use the same logic as handleTimeSlotDrop
+                      let taskToSchedule = null;
+                      
+                      try {
+                        const taskData = e.dataTransfer ? JSON.parse(e.dataTransfer.getData('text/plain')) : null;
+                        if (taskData && taskData.id) {
+                          taskToSchedule = taskData;
+                        }
+                      } catch (error) {
+                        console.warn('Failed to parse dropped task data:', error);
+                      }
+                      
+                      if (!taskToSchedule && draggedTask) {
+                        taskToSchedule = draggedTask;
+                      }
+                      
+                      if (taskToSchedule) {
+                        const today = new Date().toDateString();
+                        
+                        // Remove task from any existing time slot
+                        setScheduledTasks(prev => {
+                          const todaySchedule = { ...prev[today] };
+                          
+                          // Find and remove the task from any existing time slot
+                          Object.keys(todaySchedule).forEach(existingHour => {
+                            if (todaySchedule[existingHour] && todaySchedule[existingHour].id === taskToSchedule.id) {
+                              delete todaySchedule[existingHour];
+                            }
+                          });
+                          
+                          // Add task to current hour
+                          todaySchedule[currentHour] = taskToSchedule;
+                          
+                          return {
+                            ...prev,
+                            [today]: todaySchedule
+                          };
+                        });
+                        
+                        // Haptic feedback for mobile
+                        if (navigator.vibrate) {
+                          navigator.vibrate([50, 50, 50]);
+                        }
+                        
+                        console.log('Task rescheduled to current hour:', taskToSchedule.text);
+                      }
+                    }}
+                  >
+                    <div className="flex flex-col items-center gap-3">
+                      <div className={`p-4 rounded-full transition-all ${
+                        isDragging ? 'bg-green-200 text-green-700' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        <Zap size={32} />
+                      </div>
+                      <div>
+                        <h3 className={`font-semibold transition-all ${
+                          isDragging ? 'text-green-800' : 'text-gray-700'
+                        }`}>
+                          ⚡ Schedule Now
+                        </h3>
+                        <p className={`text-sm mt-1 transition-all ${
+                          isDragging ? 'text-green-600' : 'text-gray-500'
+                        }`}>
+                          Drop a task here to schedule it for the current hour
+                          <br />
+                          <span className="font-medium">
+                            Current time: {(() => {
+                              const currentHour = new Date().getHours();
+                              return currentHour === 0 ? '12:00 AM' : 
+                                     currentHour < 12 ? `${currentHour}:00 AM` : 
+                                     currentHour === 12 ? '12:00 PM' : 
+                                     `${currentHour - 12}:00 PM`;
+                            })()}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Show if current hour already has a task */}
+                    {(() => {
+                      const today = new Date().toDateString();
+                      const currentHour = new Date().getHours();
+                      const todaySchedule = scheduledTasks[today] || {};
+                      return todaySchedule[currentHour] && (
+                        <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <p className="text-sm text-yellow-800">
+                            ⚠️ Current hour already has: <strong>{todaySchedule[currentHour].text}</strong>
+                            <br />
+                            <span className="text-xs">Dropping a new task will replace it</span>
+                          </p>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {/* Completed Tasks Section */}
+              {sortedCompletedTasks.length > 0 && (
+                <div className="border-t border-gray-200 pt-6">
+                  <h3 className="text-sm font-semibold text-gray-500 mb-3 flex items-center gap-2">
+                    ✅ Completed Tasks ({sortedCompletedTasks.length})
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {sortedCompletedTasks.map((task) => {
+                      const priority = getTaskPriority(task.importance || 5, task.urgency || 5);
+                      const isScheduled = isTaskScheduled(task.id);
+                      const scheduledTime = getTaskScheduledTime(task.id);
+                      
+                      return (
+                        <div
+                          key={task.id}
+                          className={`${task.color} p-4 rounded-lg shadow-md transform transition-all hover:scale-105 hover:shadow-lg select-none relative opacity-75`}
+                        >
+                          {/* Scheduled Indicator */}
+                          {isScheduled && (
+                            <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full shadow-lg flex items-center gap-1">
+                              <Clock size={10} />
+                              {scheduledTime}
+                            </div>
+                          )}
+                          
+                          <div className="flex items-start justify-between mb-3">
+                            <button
+                              onClick={() => toggleTask(task.id)}
+                              className="w-5 h-5 rounded border-2 flex items-center justify-center transition-all bg-green-500 border-green-500 text-white"
+                            >
+                              <span className="text-xs">✓</span>
+                            </button>
+                            <div className="flex items-center gap-2">
+                              <div className={`px-2 py-1 rounded-full text-xs font-semibold ${priority.color} ${priority.bgColor}`}>
+                                {priority.label}
+                              </div>
+                              <button
+                                onClick={() => deleteTask(task.id)}
+                                className="text-red-500 hover:text-red-700 transition-all p-1 hover:bg-red-100 rounded"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                          </div>
+                          
+                          <p className="text-sm font-medium mb-3 line-through text-gray-600">
+                            {task.text}
+                          </p>
+                          
+                          <div className="mt-2 text-xs text-green-600 font-semibold">
+                            +10 points! ✨
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {currentTasks.length === 0 && (
+                              <div className="text-center py-12">
+                <div className="text-6xl mb-4">📝</div>
+                <p className="text-gray-500 text-lg">No tasks yet in {selectedCategory}</p>
+                <p className="text-gray-400 text-sm">Click the + button to add your first task!</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'calendar' && renderCalendar()}
+
+        {activeTab === 'timeline' && renderTimeline()}
+
+        {activeTab === 'completed' && (
+          <div className="bg-white rounded-lg shadow-lg p-6 min-h-96">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                  ✅ Completed Tasks
+                  <span className="text-lg">({tasks.filter(task => task.completed).length})</span>
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Great job! Here are all your completed tasks across all categories.
+                </p>
+              </div>
+              
+              {/* Clear All Completed Button */}
+              {tasks.filter(task => task.completed).length > 0 && (
+                <button
+                  onClick={() => {
+                    if (confirm(`Are you sure you want to clear all ${tasks.filter(task => task.completed).length} completed tasks? Your points will be kept.`)) {
+                      // Just remove completed tasks without affecting points or history
+                      const completedTasksCount = tasks.filter(task => task.completed).length;
+                      setTasks(tasks.filter(task => !task.completed));
+                      
+                      alert(`Cleared ${completedTasksCount} completed tasks. Your ${points} points have been retained! 🎉`);
+                    }
+                  }}
+                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-all flex items-center gap-2"
+                >
+                  <X size={16} />
+                  Clear All
+                </button>
+              )}
+            </div>
+
+            {/* Completed Tasks Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {tasks.filter(task => task.completed).length === 0 ? (
+                <div className="col-span-full text-center py-12">
+                  <div className="text-6xl mb-4">🎯</div>
+                  <p className="text-gray-500 text-lg">No completed tasks yet</p>
+                  <p className="text-gray-400 text-sm">Complete some tasks to see them here!</p>
+                </div>
+              ) : (
+                // Group completed tasks by category
+                Object.entries(
+                  tasks
+                    .filter(task => task.completed)
+                    .reduce((acc, task) => {
+                      if (!acc[task.category]) acc[task.category] = [];
+                      acc[task.category].push(task);
+                      return acc;
+                    }, {})
+                ).map(([category, categoryTasks]) => (
+                  <div key={category} className="col-span-full mb-6">
+                    <h3 className="text-lg font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      📁 {category}
+                      <span className="text-sm bg-gray-200 px-2 py-1 rounded-full">
+                        {categoryTasks.length}
+                      </span>
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {categoryTasks.map((task) => {
+                        const priority = getTaskPriority(task.importance || 5, task.urgency || 5);
+                        
+                        return (
+                          <div
+                            key={task.id}
+                            className={`${task.color} p-4 rounded-lg shadow-md opacity-75 relative border-l-4 border-green-500`}
+                          >
+                            {/* Completion Badge */}
+                            <div className="absolute -top-2 -right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full shadow-lg flex items-center gap-1">
+                              ✓ Done
+                            </div>
+                            
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="w-5 h-5 rounded border-2 bg-green-500 border-green-500 text-white flex items-center justify-center">
+                                <span className="text-xs">✓</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className={`px-2 py-1 rounded-full text-xs font-semibold ${priority.color} ${priority.bgColor}`}>
+                                  {priority.label}
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    if (confirm('Are you sure you want to delete this completed task? Your points will be kept.')) {
+                                      // Remove task without affecting points or history
+                                      const taskId = task.id;
+                                      setTasks(tasks.filter(t => t.id !== taskId));
+                                    }
+                                  }}
+                                  className="text-red-500 hover:text-red-700 transition-all p-1 hover:bg-red-100 rounded"
+                                >
+                                  <X size={16} />
+                                </button>
+                              </div>
+                            </div>
+                            
+                            <p className="text-sm font-medium line-through text-gray-600 mb-3">
+                              {task.text}
+                            </p>
+                            
+                            {/* Show original priority levels */}
+                            <div className="flex items-center justify-between text-xs text-gray-600">
+                              <div className="flex items-center gap-3">
+                                <span>Importance: {task.importance || 5}/10</span>
+                                <span>Urgency: {task.urgency || 5}/10</span>
+                              </div>
+                            </div>
+                            
+                            <div className="mt-2 text-xs text-green-600 font-semibold flex items-center justify-between">
+                              <span>Points earned & kept! ✨</span>
+                              <button
+                                onClick={() => toggleTask(task.id)}
+                                className="text-orange-500 hover:text-orange-700 transition-all text-xs underline"
+                              >
+                                Mark incomplete
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Stats Summary */}
+            {tasks.filter(task => task.completed).length > 0 && (
+              <div className="mt-8 border-t pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-green-50 p-4 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {tasks.filter(task => task.completed).length}
+                    </div>
+                    <div className="text-sm text-green-800">Total Completed</div>
+                  </div>
+                  <div className="bg-blue-50 p-4 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {tasks.filter(task => task.completed).length * 10}
+                    </div>
+                    <div className="text-sm text-blue-800">Points Earned</div>
+                  </div>
+                  <div className="bg-purple-50 p-4 rounded-lg text-center">
+                    <div className="text-2xl font-bold text-purple-600">
+                      {Object.keys(tasks.filter(task => task.completed).reduce((acc, task) => {
+                        acc[task.category] = true;
+                        return acc;
+                      }, {})).length}
+                    </div>
+                    <div className="text-sm text-purple-800">Categories Completed</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Achievements and Goals Panel */}
+        {(achievements.length > 0 || customGoals.length > 0) && (
+          <div className="mt-6 bg-white rounded-lg shadow-lg p-4">
+            <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+              🏆 Achievements & Goals
+              <span className="text-sm bg-gray-200 px-2 py-1 rounded-full">
+                {achievements.length + customGoals.filter(g => g.completed).length}
+              </span>
+            </h3>
+            
+            {/* Built-in Achievements */}
+            {achievements.length > 0 && (
+              <div className="mb-4">
+                <h4 className="text-sm font-medium text-gray-600 mb-2">🎖️ System Achievements</h4>
+                <div className="flex flex-wrap gap-2">
+                  {achievementList
+                    .filter(achievement => achievements.includes(achievement.id))
+                    .map(achievement => {
+                      const Icon = achievement.icon;
+                      return (
+                        <div
+                          key={achievement.id}
+                          className="bg-gradient-to-r from-yellow-400 to-orange-400 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
+                        >
+                          <Icon size={16} />
+                          {achievement.name}
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+            
+            {/* Custom Goals */}
+            {customGoals.filter(g => g.completed).length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-600 mb-2">🎯 Completed Goals</h4>
+                <div className="flex flex-wrap gap-2">
+                  {customGoals
+                    .filter(goal => goal.completed)
+                    .map(goal => (
+                      <div
+                        key={goal.id}
+                        className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
+                        title={goal.description}
+                      >
+                        <Target size={16} />
+                        {goal.title}
+                        <span className="text-xs opacity-75">+{goal.reward}</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+            
+            {/* Active Goals Progress */}
+            {customGoals.filter(g => !g.completed).length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-medium text-gray-600 mb-3">🎯 Active Goals</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {customGoals
+                    .filter(goal => !goal.completed)
+                    .slice(0, 4) // Show max 4 active goals in summary
+                    .map(goal => {
+                      const progressPercentage = Math.min(100, (goal.progress / goal.target) * 100);
+                      
+                      return (
+                        <div key={goal.id} className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-800">{goal.title}</span>
+                            <span className="text-xs text-purple-600">+{goal.reward} pts</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
+                            <div 
+                              className="bg-purple-500 h-2 rounded-full transition-all duration-500"
+                              style={{ width: `${progressPercentage}%` }}
+                            ></div>
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            {goal.progress}/{goal.target} ({Math.round(progressPercentage)}%)
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+                
+                {customGoals.filter(g => !g.completed).length > 4 && (
+                  <div className="mt-2 text-center">
+                    <button
+                      onClick={() => setShowGoalsModal(true)}
+                      className="text-sm text-purple-600 hover:text-purple-800 underline"
+                    >
+                      View all {customGoals.filter(g => !g.completed).length} active goals
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Data Persistence Info */}
+        <div className="mt-4 text-center text-xs text-gray-500">
+          💾 Your data is automatically saved and will persist between sessions
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default StickyTasks;
